@@ -9,7 +9,8 @@
     "build": "node scripts/build.mjs",
     "demo": "node scripts/demo.mjs",
     "test:browser": "node tests/browser-e2e.mjs",
-    "check:spec": "openspec validate --all --strict"
+    "check:spec": "openspec validate --all --strict",
+    "pretest": "pnpm build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",

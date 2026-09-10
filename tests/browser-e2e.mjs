@@ -5,7 +5,7 @@ import {mkdir,mkdtemp,readFile,writeFile,access} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
-const root=resolve(import.meta.dirname,'..'), work=resolve(root,'../../work/browser-test'), evidence=resolve(root,'../browser-evidence');
+const root=resolve(import.meta.dirname,'..'), work=resolve(root,'../../work/browser-test'), evidence=process.env.BROWSER_EVIDENCE_DIR||resolve(root,'../browser-evidence');
 try {await access(resolve(work,'browsers'));process.env.PLAYWRIGHT_BROWSERS_PATH ||= resolve(work,'browsers');} catch {}
 await mkdir(work,{recursive:true});
 const {chromium}=await import('playwright');

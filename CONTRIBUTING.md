@@ -8,4 +8,4 @@ UI 使用现有原生 HTML/CSS，设计依据见 `docs/ui-design.md`。验证桌
 
 每次发布更新版本、CHANGELOG，核对构建清单与浏览器验收来自同一产物。CI 不自动发布。依赖升级以 Dependabot PR 追踪，通过检查后再评估合并。
 
-禁止提交 `.local`、配对码、浏览器 profile、真实业务数据或本机专属 `mcp-config.json`。公开截图也需脱敏。发现敏感问题时使用 GitHub 私密漏洞报告，不在公开 Issue 中粘贴凭据。
+禁止提交 `.local`、配对码、浏览器 profile、真实业务数据或本机专属 `mcp-config.json`。公开截图也需脱敏。敏感问题按 SECURITY.md 的受限报告流程处理，不在 Issue 中粘贴凭据。

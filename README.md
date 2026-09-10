@@ -70,7 +70,7 @@ TEST_EXTENSION=dist/extension pnpm test:browser
 
 macOS 可在安装依赖和 Chromium 后双击 `启动验收.command`，打开独立预览浏览器；保持终端运行，Ctrl+C 退出。避免同时重复启动同一个预览 profile。
 
-当前为开源预览版，未通过 Chrome Web Store 审核。
+当前为私有仓库维护的预览版，未公开发布，也未通过 Chrome Web Store 审核。
 
 ## 维护
 
