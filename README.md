@@ -4,6 +4,8 @@
 
 ![脚本库](docs/manager.png)
 
+插件入口：浏览器右上角的扩展菜单 → WebMCP Script。脚本库同时支持工具栏弹窗和扩展选项页；localhost 页面只用于开发验收。
+
 ## 安装
 
 需要 Node.js 22+、pnpm、支持用户脚本 API 的 Chrome 135+。

@@ -84,3 +84,8 @@ The manager SHALL separate script management from connection settings, allow nam
 #### Scenario: Cancel removal
 - **WHEN** the user cancels the removal dialog
 - **THEN** the script and its tools remain installed
+
+#### Scenario: Browser toolbar entry
+- **WHEN** the user opens WebMCP Script from the browser extension menu
+- **THEN** the extension popup presents the installed script library with a minimum usable width of 380 pixels
+- **AND** the localhost demo is not used as the product entry point
