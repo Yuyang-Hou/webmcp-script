@@ -1,0 +1,100 @@
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {resolve} from 'node:path';
+import {mkdir,mkdtemp,readFile,writeFile,access} from 'node:fs/promises';
+import {spawn} from 'node:child_process';
+import {Client} from '@modelcontextprotocol/sdk/client/index.js';
+import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
+const root=resolve(import.meta.dirname,'..'), work=resolve(root,'../../work/browser-test'), evidence=resolve(root,'../browser-evidence');
+try {await access(resolve(work,'browsers'));process.env.PLAYWRIGHT_BROWSERS_PATH ||= resolve(work,'browsers');} catch {}
+await mkdir(work,{recursive:true});
+const {chromium}=await import('playwright');
+await mkdir(evidence,{recursive:true});
+const testedArtifact='dist/extension';
+const manifest=testedArtifact==='dist/extension' ? await readFile(resolve(root,'dist/build.json')) : null;
+const artifactEvidence={testedArtifact,build:manifest?JSON.parse(manifest):null,buildManifestSha256:manifest?createHash('sha256').update(manifest).digest('hex'):null};
+const passed=[];const record=(name)=>{passed.push(name);console.log('PASS',name);};
+const token='browser-e2e-local-test-token-000000000000000';
+const bridgePort=Number(process.env.TEST_PORT||17941), demoPort=Number(process.env.TEST_DEMO_PORT||17992);
+const demoUrl=`http://127.0.0.1:${demoPort}`;
+let client,client2,context;
+const allClients=[];
+const demo=spawn(process.execPath,['scripts/demo.mjs'],{cwd:root,stdio:'ignore',env:{...process.env,DEMO_PORT:String(demoPort)}});
+async function connect(){const peer=new Client({name:'browser-e2e-'+allClients.length,version:'1.0.0'});const transport=new StdioClientTransport({command:process.execPath,args:[resolve(root,'bridge/server.mjs')],env:{...process.env,WEBMCP_TOKEN:token,WEBMCP_PORT:String(bridgePort),WEBMCP_IDLE_MS:'1000'},stderr:'pipe'});await peer.connect(transport);allClients.push(peer);return peer;}
+async function call(name,args={},peer=client) {const result=await peer.callTool({name,arguments:args});if(result.isError)throw Error(result.content[0].text);return JSON.parse(result.content[0].text);}
+async function until(fn,timeout=12000){const start=Date.now();let last;do{try {return await fn();}catch(e){last=e;await new Promise(r=>setTimeout(r,150));}}while(Date.now()-start<timeout);throw last;}
+try {
+  client=await connect();
+  context=await chromium.launchPersistentContext(await mkdtemp(resolve(work,'e2e-')),{channel:'chromium',headless:false,args:[`--disable-extensions-except=${resolve(root,testedArtifact)}`,`--load-extension=${resolve(root,testedArtifact)}`]});
+  const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');
+  const id=new URL(worker.url()).host;
+  const settings=await context.newPage();await settings.goto('chrome://extensions/?id='+id);
+  const permission=settings.locator('#allow-user-scripts cr-toggle');await permission.waitFor();
+  if(!(await permission.evaluate(e=>e.checked)))await permission.click();
+  await settings.screenshot({path:resolve(evidence,'permission-enabled.png')});record('isolated Chrome userScripts permission enabled through native UI');
+  const manager=await context.newPage();await manager.goto(`chrome-extension://${id}/manager.html`);
+  await manager.locator('nav a[href="#connection-settings"]').click();
+  await manager.locator('details.advanced summary').click();await manager.locator('#port').fill(String(bridgePort));await manager.locator('#token').fill(token);await manager.locator('#pair').click();
+  await manager.locator('#retry').click();await manager.locator('nav a[href="#library"]').click();
+  const initialDemo=await context.newPage();await initialDemo.goto(demoUrl+'/');
+  await manager.locator('#import').setInputFiles(resolve(root,'dist/examples/local-demo.user.js'));
+  await manager.locator('#preview-dialog').waitFor();
+  const beforeConfirm=await until(()=>call('pages'));assert(beforeConfirm.pages.every(p=>p.tools.length===0));record('import preview does not register tools before confirmation');
+  await manager.screenshot({path:resolve(evidence,'import-preview.png'),fullPage:false});
+  await manager.locator('#cancel-install').click();assert((await call('pages')).pages.every(p=>p.tools.length===0));record('canceling import leaves pages and installed scripts unchanged');
+  await manager.locator('#import').setInputFiles(resolve(root,'dist/examples/local-demo.user.js'));
+  await manager.locator('#confirm-install').click();
+  await until(async()=>{assert.equal(await manager.locator('#error').innerText(),'');assert(await manager.getByRole('button',{name:'停用',exact:true}).count());});
+  record('script imported through file input');
+  await manager.locator('#search').fill('no-matching-script');assert.equal(await manager.locator('.script').count(),0);await manager.getByRole('button',{name:'清除筛选'}).click();assert.equal(await manager.locator('.script').count(),1);record('search empty state and clear filters');
+  await manager.locator('#filter').selectOption('disabled');assert.equal(await manager.locator('.script').count(),0);await manager.locator('#filter').selectOption('all');record('state filter shows matching scripts');
+  await manager.setViewportSize({width:390,height:844});assert(await manager.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await manager.screenshot({path:resolve(evidence,'manager-mobile.png'),fullPage:true});record('390px layout has no horizontal overflow');await manager.setViewportSize({width:1280,height:900});
+
+  const visited=await until(()=>call('visit_page',{url:demoUrl+'/'}));
+  const pageId=visited.pageId;const inspect=()=>call('inspect_page',{pageId});
+  const snapshot=await until(async()=>{const s=await inspect();assert.equal(s.tools.length,2);return s;});
+  assert(snapshot.tools.every(t=>!('inputSchema'in t)));record('MCP visit returns summaries without full schemas');
+  const args={pageId,revision:snapshot.revision,name:'local-demo__sum'};
+  const schema=await call('describe_tool',args);assert.equal(schema.inputSchema.properties.a.type,'number');
+  assert.equal((await call('call_tool',{...args,input:{a:7,b:5}})).result.sum,12);record('MCP describe and call execute independent script in real Chrome');
+  await assert.rejects(()=>call('call_tool',{...args,input:{a:'x',b:2}}),/有限数字/);record('script rejects invalid input through MCP');
+  record('native WebMCP API available='+snapshot.native);
+  client2=await connect();
+  const parallel=await Promise.all([call('inspect_page',{pageId}),call('inspect_page',{pageId},client2)]);assert.equal(parallel[0].revision,parallel[1].revision);record('two MCP clients share one browser relay concurrently');
+  await client.close();client=client2;assert.equal((await call('call_tool',{...args,input:{a:3,b:4}})).result.sum,7);record('closing first MCP client preserves second client browser calls');
+  let page;for(const candidate of context.pages()){if(await candidate.evaluate(()=>globalThis.WebMCPScript?.snapshot().revision).catch(()=>null)===snapshot.revision)page=candidate;}assert(page,'bind exact MCP document revision to Playwright Page');
+  await page.reload();const refreshed=await until(async()=>{const s=await inspect();assert.notEqual(s.revision,snapshot.revision);assert.equal(s.tools.length,2);return s;});
+  await assert.rejects(()=>call('call_tool',{...args,input:{a:1,b:2}}),/变化|STALE/);record('refresh keeps one registration and rejects stale revision');
+  await manager.getByRole('button',{name:'停用',exact:true}).click();await until(async()=>assert.equal((await inspect()).tools.length,0));
+  await manager.getByRole('button',{name:'启用',exact:true}).click();await until(async()=>assert.equal((await inspect()).tools.length,2));record('disable cleans tools and enable restores without refresh');
+  const source=await readFile(resolve(root,'dist/examples/local-demo.user.js'),'utf8');
+  const updated=source.replace('@version 0.1.0','@version 0.1.1').replace('sum:a+b','sum:a+b+100');
+  const chooserPromise=manager.waitForEvent('filechooser');await manager.locator('.manage summary').click();await manager.getByRole('button',{name:'替换 / 更新',exact:true}).click();
+  await(await chooserPromise).setFiles({name:'local-demo.user.js',mimeType:'text/javascript',buffer:Buffer.from(updated)});
+  await manager.locator('#preview-dialog').waitFor();await manager.locator('#confirm-install').click();
+  await until(async()=>{const s=await inspect();assert.equal((await call('call_tool',{pageId,revision:s.revision,name:'local-demo__sum',input:{a:1,b:2}})).result.sum,103);});record('update replaces active code without duplicate registration');
+  if(!process.env.SKIP_SYNTAX){const badChooser=manager.waitForEvent('filechooser');await manager.locator('.manage summary').click();await manager.getByRole('button',{name:'替换 / 更新',exact:true}).click();
+  await(await badChooser).setFiles({name:'broken.user.js',mimeType:'text/javascript',buffer:Buffer.from(updated+'\nconst = ;')});
+  await manager.locator('#preview-dialog').waitFor();await manager.locator('#confirm-install').click();
+  await until(async()=>assert.notEqual(await manager.locator('#error').innerText(),''));record('syntax error is visible in manager');
+  const afterInvalid=await inspect();assert.equal((await call('call_tool',{pageId,revision:afterInvalid.revision,name:'local-demo__sum',input:{a:1,b:2}})).result.sum,103);record('invalid update preserves previous working script');
+  await manager.screenshot({path:resolve(evidence,'script-error.png'),fullPage:false});await manager.locator('#cancel-install').click();}
+  await manager.locator('.manage summary').click();await manager.getByRole('button',{name:'恢复上一版',exact:true}).click();await manager.locator('#confirm-install').click();
+  await until(async()=>{const s=await inspect();assert.equal((await call('call_tool',{pageId,revision:s.revision,name:'local-demo__sum',input:{a:1,b:2}})).result.sum,3);});record('restore previous version returns original script behavior');
+  await manager.getByRole('button',{name:'停用',exact:true}).click();await until(async()=>assert.equal((await inspect()).tools.length,0));
+  const disabledUpdate=manager.waitForEvent('filechooser');await manager.locator('.manage summary').click();await manager.getByRole('button',{name:'替换 / 更新',exact:true}).click();await(await disabledUpdate).setFiles({name:'local-demo.user.js',mimeType:'text/javascript',buffer:Buffer.from(updated)});await manager.locator('#confirm-install').click();
+  await until(async()=>{assert.equal((await inspect()).tools.length,0);assert(await manager.getByRole('button',{name:'启用',exact:true}).count());});record('updating a disabled script preserves disabled state');
+  await manager.getByRole('button',{name:'启用',exact:true}).click();await until(async()=>{const s=await inspect();assert.equal((await call('call_tool',{pageId,revision:s.revision,name:'local-demo__sum',input:{a:1,b:2}})).result.sum,103);});record('enabling updated disabled script runs the new version');
+  await manager.locator('.manage summary').click();await manager.getByRole('button',{name:'卸载',exact:true}).click();await manager.locator('#cancel-remove').click();assert.equal((await inspect()).tools.length,2);record('cancel uninstall keeps script and tools');await manager.locator('.manage summary').click();await manager.getByRole('button',{name:'卸载',exact:true}).click();await manager.locator('#confirm-remove').click();await until(async()=>assert.equal((await inspect()).tools.length,0));record('uninstall removes current page tools');
+  await manager.locator('#import').setInputFiles(resolve(root,'dist/examples/route-demo.user.js'));await manager.locator('#confirm-install').click();await manager.getByRole('button',{name:'停用',exact:true}).waitFor();
+  await page.evaluate(()=>history.pushState({},'','/only'));await until(async()=>assert.equal((await inspect()).tools.length,2));
+  const route=await inspect();assert(route.tools.every(t=>t.name.startsWith('route-demo__')));await page.evaluate(()=>history.pushState({},'','/other'));await until(async()=>assert.equal((await inspect()).tools.length,0));
+  await assert.rejects(()=>call('call_tool',{pageId,revision:route.revision,name:route.tools[0].name,input:{}}));
+  await page.evaluate(()=>history.pushState({},'','/only'));await until(async()=>assert.equal((await inspect()).tools.length,2));record('SPA enter, exit and reenter synchronize tools and reject old revision');
+  await page.goto(demoUrl+'/only-next');await until(async()=>assert.equal((await inspect()).tools.length,2));record('full navigation restores matching script once');
+  await client.close();await new Promise(r=>setTimeout(r,1800));client=await connect();await until(()=>call('pages'),20000);record('bridge process disconnect/restart reconnects automatically');
+  await manager.locator('#refresh').click();await manager.screenshot({path:resolve(evidence,'manager.png'),fullPage:true});
+  if(manifest)await writeFile(resolve(evidence,'build.json'),manifest);
+  await writeFile(resolve(evidence,'e2e.json'),JSON.stringify({at:new Date().toISOString(),browser:context.browser().version(),extensionId:id,passed,...artifactEvidence},null,2));
+} catch(e){const pages=context?.pages()||[];const ui=pages.find(p=>p.url().includes('manager.html'));console.error(JSON.stringify(await call('pages').catch(e=>({error:e.message}))));if(ui){console.error(await ui.locator('body').innerText());await ui.screenshot({path:resolve(evidence,'failure.png'),fullPage:true});}await writeFile(resolve(evidence,'e2e-failure.json'),JSON.stringify({passed,error:e.stack},null,2));throw e;}
+finally {await context?.close();await Promise.all(allClients.map(peer=>peer.close().catch(()=>{})));demo.kill();}

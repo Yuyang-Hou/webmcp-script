@@ -1,0 +1,14 @@
+name: 产品建议
+description: 描述希望完成的用户目标。
+labels: [enhancement]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 什么场景下，想完成什么？
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 什么结果算解决？

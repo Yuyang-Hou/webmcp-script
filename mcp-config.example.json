@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "webmcp-script": {
+      "command": "/absolute/path/to/node",
+      "args": ["/absolute/path/to/webmcp-script/bridge/server.mjs"]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {prepareImport} from '../extension/metadata.js';
+const source=version=>`// ==UserScript==\n// @id example\n// @name Example\n// @version ${version}\n// @match https://example.com/*\n// ==/UserScript==\nWebMCPScript.install({id:'example',tools:[]});`;
+const first=prepareImport(source('1'),[]);
+assert.equal(first.enabled,true);
+const old={...first,enabled:false};
+const update=prepareImport(source('2'),[old],old.id,old.source);
+assert.equal(update.enabled,false);
+assert.equal(update.previousSource,old.source);
+const restore=prepareImport(update.previousSource,[update],update.id,update.source);
+assert.equal(restore.version,'1');assert.equal(restore.enabled,false);assert.equal(restore.previousSource,update.source);
+assert.throws(()=>prepareImport(source('2'),[old]),/已安装/);
+assert.throws(()=>prepareImport(source('2'),[old],old.id,'stale source'),/其他窗口/);
+assert.throws(()=>prepareImport(source('2'),[],'example',old.source),/目标已变化/);
+assert.throws(()=>prepareImport(old.source,[old],old.id,old.source),/一致/);
+assert.throws(()=>prepareImport(source('2'),[old],old.id,old.source,true),/启停状态/);
+console.log('metadata: update preserves disabled state; one-level restore and stale previews checked');

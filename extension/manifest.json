@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "WebMCP Script",
+  "version": "0.3.0",
+  "minimum_chrome_version": "135",
+  "description": "独立网站脚本与本地 AI WebMCP 桥接",
+  "permissions": [
+    "storage",
+    "scripting",
+    "tabs",
+    "userScripts",
+    "alarms",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "WebMCP Script",
+    "default_popup": "manager.html"
+  },
+  "options_page": "manager.html",
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}

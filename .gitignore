@@ -1,0 +1,7 @@
+node_modules/
+.local/
+dist/
+work/
+.DS_Store
+mcp-config.json
+*.log
