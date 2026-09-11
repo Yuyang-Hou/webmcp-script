@@ -58,7 +58,7 @@ try{
   assert(await page.locator('#connection-label').isHidden());
   assert((await page.locator('#connection').getAttribute('aria-label')).includes('本地服务已连接'));
   await page.locator('#connection').click();await page.locator('#connection-settings').waitFor();
-  await page.locator('a[href="#scripts"]').click();
+  await page.locator('a[href="#scripts"]').click();await page.locator('a[href="#scripts"][aria-current="page"]').waitFor();
   assert.equal(await page.locator('.app-header h1').innerText(),'');
   assert.equal(await page.locator('.app-header h1').getAttribute('aria-label'),'WebMCP Script');
   assert.equal(await page.locator('#new-script').evaluate(el=>getComputedStyle(el).borderTopWidth),'0px');
@@ -104,7 +104,7 @@ try{
   pass('single-line and multiline drag selection stay visible on the active line');
   const updated=sample.replace('1.0.0','1.1.0');
   await page.locator('.cm-content').fill(updated);await page.locator('#save:not([disabled])').waitFor();
-  await page.locator('a[href="#scripts"]').click();await page.locator('a[href="#editor"]').click();assert((await page.locator('.cm-content').innerText()).includes('1.1.0'));pass('draft survives tab switching');
+  await page.locator('a[href="#scripts"]').click();await page.locator('a[href="#scripts"][aria-current="page"]').waitFor();await page.locator('a[href="#editor"]').click();await page.locator('a[href="#editor"][aria-current="page"]').waitFor();assert((await page.locator('.cm-content').innerText()).includes('1.1.0'));pass('draft survives tab switching');
   await page.locator('#save').click();await page.locator('#preview-dialog[open]').waitFor();assert.equal(await page.evaluate(()=>fixture.mutations),0);assert.equal(await page.locator('#preview-state').innerText(),'保留停用状态');
   await page.locator('#cancel-save').click();assert.equal(await page.evaluate(()=>fixture.mutations),0);
   await page.locator('#save').click();await page.locator('#confirm-save').click();await page.locator('#preview-dialog').waitFor({state:'hidden'});await page.locator('#save:disabled').waitFor();
@@ -129,12 +129,12 @@ try{
   const template=await page.locator('.cm-content').innerText();assert(template.includes('// ==UserScript=='));assert(template.includes('document.modelContext.registerTool'));assert(!template.includes('WebMCPScript'));assert(template.includes('https://example.com/*'));
   await page.screenshot({path:resolve(evidence,'新建脚本.png')});
   await page.locator('.cm-content').fill(template+'\n// 保留新建草稿');
-  await page.locator('a[href="#scripts"]').click();assert.equal(await page.locator('#new-script').getAttribute('aria-current'),null);await page.locator('#new-script').click();
+  await page.locator('a[href="#scripts"]').click();await page.locator('a[href="#scripts"][aria-current="page"]').waitFor();assert.equal(await page.locator('#new-script').getAttribute('aria-current'),null);await page.locator('#new-script').click();
   assert((await page.locator('.cm-content').innerText()).includes('保留新建草稿'));await page.locator('#new-script').click();assert((await page.locator('.cm-content').innerText()).includes('保留新建草稿'));assert(await page.locator('#editor-tab').isHidden());
   pass('plus is the selected editor tab; template and draft survive repeated selection without a new tab');
   const fresh=sample.replaceAll('example','reading').replace('网页阅读助手','新脚本');await page.locator('.cm-content').fill(fresh);await page.locator('#save').click();await page.locator('#confirm-save').click();await page.locator('#preview-dialog').waitFor({state:'hidden'});await page.locator('#save:disabled').waitFor();assert.equal(await page.evaluate(()=>fixture.scripts.length),2);assert(await page.locator('#editor-tab').isHidden());assert.equal(await page.locator('#new-script').getAttribute('aria-current'),'page');pass('plus tab → paste full source → preview → save creates a script without adding a tab');
-  await page.locator('a[href="#pages"]').click();assert((await page.locator('#page-list').innerText()).includes('浏览器未提供原生 WebMCP 接口'));await page.locator('#page-list details').first().locator('summary').click();assert((await page.locator('#page-list').innerText()).includes('website_search'));await page.screenshot({path:resolve(evidence,'网页工具.png')});pass('native website tool displayed; unsupported state is distinct from zero tools');
-  await page.locator('a[href="#scripts"]').click();await page.locator('#search').fill('missing');await page.locator('#empty-action').click();assert.equal(await page.locator('#script-rows tr').count(),2);
+  await page.locator('a[href="#pages"]').click();await page.locator('a[href="#pages"][aria-current="page"]').waitFor();assert((await page.locator('#page-list').innerText()).includes('浏览器未提供原生 WebMCP 接口'));await page.locator('#page-list details').first().locator('summary').click();assert((await page.locator('#page-list').innerText()).includes('website_search'));await page.screenshot({path:resolve(evidence,'网页工具.png')});pass('native website tool displayed; unsupported state is distinct from zero tools');
+  await page.locator('a[href="#scripts"]').click();await page.locator('a[href="#scripts"][aria-current="page"]').waitFor();await page.locator('#search').fill('missing');await page.locator('#empty-action').click();assert.equal(await page.locator('#script-rows tr').count(),2);
   await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:resolve(evidence,'窄屏管理.png')});pass('empty search clears; 390px viewport has no document overflow');
   const popup=await context.newPage();await popup.setViewportSize({width:344,height:600});await popup.goto(origin+'/popup.html');await popup.locator('#tool-count').filter({hasText:'1'}).waitFor();const popupFonts=await popup.evaluate(()=>{const s=getComputedStyle(document.body);return {family:s.fontFamily,size:s.fontSize};});assert.deepEqual(popupFonts,{family:managerFonts.body.family,size:'13px'});assert.equal(await popup.locator('#scripts input[type=checkbox]').count(),1);
   assert.equal(await popup.locator('#script-group').evaluate(el=>el.open),false);assert(await popup.locator('#new-script').isHidden());
@@ -218,7 +218,7 @@ try{
   await page.locator('.cm-content').fill(standard);await page.locator('#save').click();await page.locator('#preview-dialog[open]').waitFor();assert.equal(await page.locator('#preview-matches').innerText(),'https://example.com/*');await page.locator('#confirm-save').click();await page.locator('#preview-dialog').waitFor({state:'hidden'});
   assert(!(await page.locator('.cm-content').innerText()).includes('@match ['));assert.equal(await page.evaluate(()=>fixture.scripts.find(s=>s.namespace==='copied-userscript').matches[0]),'https://example.com/*');
   pass('pasted native userscript needs no id; link-form match is normalized in preview, storage and editor');
-  await page.locator('a[href="#scripts"]').click();
+  await page.locator('a[href="#scripts"]').click();await page.locator('a[href="#scripts"][aria-current="page"]').waitFor();
   await page.locator('table').waitFor({state:'visible'});
   const tableTop=await page.locator('table').evaluate(el=>el.getBoundingClientRect().top);
   page.once('dialog',dialog=>dialog.accept());await page.locator('[data-script-id=example]').getByRole('button',{name:'卸载'}).click();await page.locator('#notice').waitFor();
@@ -229,7 +229,7 @@ try{
   assert.equal(await page.locator('table').evaluate(el=>el.getBoundingClientRect().top),tableTop);
   pass('uninstall feedback floats outside layout and disappears automatically');
   await page.evaluate(()=>{fixture.bridgeStatus='未配对';window.dispatchEvent(new Event('focus'));});
-  await page.locator('a[href="#connection-settings"]').click();
+  await page.locator('a[href="#connection-settings"]').click();await page.locator('a[href="#connection-settings"][aria-current="page"]').waitFor();
   await page.locator('#connection-state').filter({hasText:'尚未连接'}).waitFor();
   assert(!(await page.locator('#manual-connection').getAttribute('open')));
   await page.locator('#copy-connection:enabled').waitFor();await page.locator('#copy-connection').click();
