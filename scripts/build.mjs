@@ -1,5 +1,8 @@
 import { cp, mkdir, rm, readFile, writeFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import {build} from 'esbuild';
+import {fileURLToPath} from 'node:url';
+import {dirname,resolve,join} from 'node:path';
 const root = new URL('../', import.meta.url);
 const dist = new URL('dist/', root);
 const {version} = JSON.parse(await readFile(new URL('package.json',root),'utf8'));
@@ -14,6 +17,21 @@ for (const [source,name] of [['demo.source.js','local-demo.user.js'],['route-dem
 await rm(dist, {recursive:true,force:true});
 await mkdir(dist, { recursive:true });
 for (const folder of ['extension','examples']) await cp(new URL(folder,root),new URL(folder+'/',dist),{recursive:true});
+// Local build paths only; pairing secrets are never packaged into the extension.
+await writeFile(new URL('extension/connection-config.json',dist),JSON.stringify({mcpServers:{'webmcp-script':{command:process.execPath,args:[fileURLToPath(new URL('bridge/server.mjs',root))]}}},null,2)+'\n');
+const editorBuild=await build({metafile:true,entryPoints:[fileURLToPath(new URL('extension/editor.js',root))],outfile:fileURLToPath(new URL('extension/editor.js',dist)),bundle:true,format:'esm',minify:true,legalComments:'linked'});
+const licenses=new Map();
+for(const input of Object.keys(editorBuild.metafile.inputs).filter(path=>path.includes('node_modules/'))) {
+  let dir=dirname(resolve(input));
+  while(dir!==dirname(dir)) {
+    try {
+      const pkg=JSON.parse(await readFile(join(dir,'package.json'),'utf8'));
+      if(!licenses.has(pkg.name))licenses.set(pkg.name,`${pkg.name} ${pkg.version}\n${await readFile(join(dir,'LICENSE'),'utf8')}`);
+      break;
+    } catch(error) {if(error.code!=='ENOENT')throw error;dir=dirname(dir);}
+  }
+}
+await writeFile(new URL('extension/THIRD_PARTY_LICENSES.txt',dist),[...licenses.values()].join('\n\n'));
 const files = [];
 async function walk(dir, prefix='') {
   for (const item of await readdir(dir,{withFileTypes:true})) {
