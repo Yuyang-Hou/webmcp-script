@@ -13,6 +13,7 @@ test('concurrent MCP clients share a relay, isolate responses and release it whe
   const transport=()=>new StdioClientTransport({command:process.execPath,args:[fileURLToPath(new URL('../bridge/server.mjs',import.meta.url))],env,stderr:'pipe'});
   try {
     await Promise.all([a.connect(transport()),b.connect(transport())]);
+    await Promise.all([a.callTool({name:'pages',arguments:{}}),b.callTool({name:'pages',arguments:{}})]);
     const denied=new WebSocket(`ws://127.0.0.1:${port}/client`,{headers:{Origin:'https://evil.invalid',Authorization:`Bearer ${token}`,'X-WebMCP-Protocol':'1'}});
     await assert.rejects(once(denied,'open'));
     extension=new WebSocket(`ws://127.0.0.1:${port}/extension?token=${token}`,{origin:'chrome-extension://'+'b'.repeat(32)});await once(extension,'open');

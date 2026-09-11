@@ -1,29 +1,41 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>WebMCP Script · 脚本库</title><link rel="stylesheet" href="manager.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WebMCP Script</title><link rel="icon" href="icons/icon-32.png"><link rel="stylesheet" href="manager.css"></head>
 <body>
-<aside class="sidebar">
-  <a class="brand" href="#library"><span class="brand-mark" aria-hidden="true">W</span><span>WebMCP<span class="brand-sub">Script</span></span></a>
-  <nav aria-label="主导航"><a href="#library" aria-current="page">脚本库 <span id="script-count">0</span></a><a href="#connection-settings">连接设置 <span id="connection-dot" aria-label="读取状态"></span></a></nav>
-  <div class="sidebar-footer"><span>本地工作空间</span><span class="version">v0.3.0</span></div>
-</aside>
+<header class="app-header"><h1 class="brand" aria-label="WebMCP Script" title="WebMCP Script"><img src="icons/icon-48.png" width="24" height="24" alt=""></h1>
+<nav class="tab-rail" aria-label="管理面板">
+  <a href="#pages">网页工具</a><a href="#scripts" aria-current="page">已安装脚本</a>
+  <button id="new-script" class="new-tab" aria-label="新建脚本">新建脚本</button>
+  <a href="#connection-settings">连接</a><a href="#settings">设置</a>
+  <span id="editor-tab" class="editor-tab" hidden><a href="#editor"><span id="filename">新建脚本</span><span id="dirty" aria-label="未保存" hidden> ·</span></a><button id="close-editor" aria-label="关闭脚本">×</button></span>
+</nav>
+<button id="connection" class="connection" title="正在读取连接状态 · 点击打开连接设置" aria-label="正在读取连接状态，打开连接设置"><span id="connection-label">正在读取…</span></button>
+</header>
 <main>
-  <section id="library" aria-labelledby="scripts-title">
-    <header class="page-heading"><div><p class="eyebrow">工作空间 / 脚本库</p><h1 id="scripts-title">网站脚本</h1><p class="hint">管理 AI 可以使用的网站工具。</p></div><button id="import-button" class="primary"><span aria-hidden="true">＋</span> 导入脚本</button><input id="import" class="sr-only" type="file" accept=".js,.user.js" aria-label="选择脚本文件" tabindex="-1"></header>
-    <div id="setup-hint" class="setup-hint" hidden><span>完成连接设置，让 AI 发现脚本工具。</span><a href="#connection-settings">设置连接 →</a></div>
-    <div class="toolbar"><label class="search"><span class="sr-only">搜索脚本</span><input id="search" type="search" placeholder="搜索名称、网站或标识" autocomplete="off"></label><label class="filter"><span class="sr-only">脚本状态</span><select id="filter"><option value="all">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select></label><button id="refresh" class="subtle">刷新</button></div>
-    <p id="notice" class="notice" role="status"></p><div id="error-box" class="error-box" hidden><strong>操作未完成</strong><p id="error" role="alert"></p></div>
-    <div id="scripts"></div>
-    <p class="library-footer">仅安装可信来源的脚本。安装前可检查源码与网站范围。</p>
-  </section>
-  <section id="connection-settings" aria-labelledby="bridge-title" hidden>
-    <header class="page-heading"><div><p class="eyebrow">工作空间 / 连接设置</p><h1 id="bridge-title">连接 AI 客户端</h1><p class="hint">使用本机 MCP 服务，连接浏览器与 AI。</p></div></header>
-    <div class="settings-group"><div class="section-heading"><h2>本地连接</h2><span id="connection" class="status" role="status">读取状态…</span></div><p class="hint">先在 AI 客户端启用 WebMCP Script 服务，再填写生成的配对码。</p><label for="token">配对码</label><div class="row"><input id="token" type="password" placeholder="粘贴配对码" autocomplete="off" aria-describedby="token-hint"><button id="pair" class="primary">连接</button></div><p id="token-hint" class="field-hint">在项目的 <code>.local/pairing-token</code> 文件中获取，仅保存在本机。</p><details class="advanced"><summary>高级连接设置</summary><label for="port">本地端口 · 127.0.0.1</label><input id="port" type="number" min="1" max="65535" step="1" value="17891"></details></div>
-    <div class="settings-group"><div class="section-heading"><h2>用户脚本权限</h2><button id="retry" class="subtle">重试加载</button></div><p id="permission" role="status">正在检查…</p><p class="hint">在浏览器扩展详情中开启“允许用户脚本”。</p></div>
-    <p id="settings-error" class="settings-error" role="alert"></p>
-  </section>
-  <dialog id="source-dialog" aria-labelledby="source-title"><h2 id="source-title">脚本源码</h2><textarea id="source" readonly spellcheck="false" aria-label="完整脚本源码"></textarea><form method="dialog" class="dialog-actions"><button>关闭</button></form></dialog>
-  <dialog id="preview-dialog" aria-labelledby="preview-title"><p class="eyebrow">安装预览</p><h2 id="preview-title">确认安装脚本</h2><dl class="preview-meta"><dt>名称</dt><dd id="preview-name"></dd><dt>标识</dt><dd id="preview-id"></dd><dt>版本</dt><dd id="preview-version"></dd><dt>网站范围</dt><dd id="preview-matches"></dd><dt>生效状态</dt><dd id="preview-state"></dd></dl><p id="preview-scope-change" class="hint"></p><details><summary>查看完整源码</summary><textarea id="preview-source" readonly spellcheck="false" aria-label="待安装的完整源码"></textarea></details><p class="hint">脚本可读取和操作匹配网站。请确认来源与范围。</p><p id="preview-error" role="alert"></p><div class="dialog-actions"><button id="cancel-install" autofocus>取消</button><button id="confirm-install" class="primary">确认安装</button></div></dialog>
-  <dialog id="remove-dialog" aria-labelledby="remove-title"><h2 id="remove-title">卸载脚本？</h2><p id="remove-description"></p><p class="hint">当前版本和上一版将从本机移除。重新使用需要再次导入。</p><p id="remove-error" role="alert"></p><div class="dialog-actions"><button id="cancel-remove" autofocus>取消</button><button id="confirm-remove" class="danger">确认卸载</button></div></dialog>
-</main><script src="manager.js" type="module"></script>
+<p id="notice" class="notice" role="status" hidden></p><p id="error" class="error" role="alert" hidden></p>
+<section id="scripts" aria-label="已安装脚本">
+  <div class="list-toolbar"><span id="script-count" class="muted"></span><div class="row"><input id="search" type="search" aria-label="搜索脚本" placeholder="搜索脚本或网站"><select id="filter" aria-label="脚本状态"><option value="all">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select></div></div>
+  <div class="table-wrap"><table><thead><tr><th>启用</th><th>名称</th><th class="version-column">版本</th><th class="site-column">网站</th><th class="state-column">页面状态</th><th>操作</th></tr></thead><tbody id="script-rows"></tbody></table></div>
+  <div id="empty" class="empty" hidden><p id="empty-text"></p><button id="empty-action"></button></div>
+</section>
+<section id="pages" aria-label="网页工具" hidden><div class="list-toolbar"><span class="muted">已打开网页提供的原生工具</span><button id="refresh-pages">刷新</button></div><div id="page-list"></div></section>
+<section id="editor" class="editor-panel" aria-label="脚本编辑器" hidden>
+  <div class="editor-toolbar"><div class="row">
+    <details class="menu"><summary>文件</summary><div class="menu-items"><button id="file-new">新建脚本</button><button id="reopen">重新打开已保存版本</button><button id="restore">恢复上一版…</button><button id="file-close">关闭脚本</button></div></details>
+    <details class="menu"><summary>编辑</summary><div class="menu-items"><button id="undo">撤销 <kbd>⌘Z</kbd></button><button id="redo">重做 <kbd>⇧⌘Z</kbd></button><button id="find">查找 <kbd>⌘F</kbd></button></div></details>
+  </div><button id="save" disabled title="保存（⌘S / Ctrl+S）">保存</button></div>
+  <div id="code"></div><footer class="editor-status"><span>JavaScript</span><span id="save-state">未保存</span><span>UTF-8</span></footer>
+</section>
+<section id="connection-settings" class="settings connection-setup" aria-label="连接" hidden>
+  <h2>让 AI 连接这个浏览器</h2><p>首次设置只需两步。连接后，AI 就能发现网页提供的工具。</p>
+  <ol class="connection-steps">
+    <li><h3>把连接说明发给 AI</h3><p>复制后粘贴到你使用的 AI 客户端。让它完成配置，并给你一个连接码。</p><button id="copy-connection" disabled>复制连接说明</button><p id="copy-feedback" class="muted" role="status"></p><textarea id="connection-copy-fallback" aria-label="连接说明，请全选复制" readonly rows="6" hidden></textarea></li>
+    <li><h3>粘贴连接码</h3><label for="token" class="muted">使用 AI 返回的完整连接码，无需填写端口。</label><div class="row"><input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="粘贴连接码"><button id="pair">连接浏览器</button></div><p id="pair-error" class="error" role="alert" hidden></p><div class="connection-result" role="status"><strong id="connection-state">尚未连接</strong><p id="connection-next" class="muted">完成上一步后，在这里连接。</p></div></li>
+  </ol>
+  <details id="manual-connection"><summary>手动设置</summary><p>支持 stdio MCP 的客户端可使用以下本机配置。其他客户端请让 AI 帮你确认是否支持。</p><label for="mcp-config">MCP 服务配置</label><textarea id="mcp-config" readonly rows="6" spellcheck="false"></textarea><button id="copy-config" disabled>复制配置</button><label for="port">本地端口</label><input id="port" type="number" min="1" max="65535" value="17891"><p class="muted">仅粘贴旧版配对码时需要设置端口；新版连接码自带端口。连接码仅用于本机配对，请勿公开分享。</p></details>
+</section>
+<section id="settings" class="settings" aria-label="设置" hidden><h2>用户脚本</h2><p id="permission">正在检查…</p><p class="muted">如未授权，请在 Chrome 的扩展详情中开启“允许用户脚本”。</p><button id="retry">重新加载脚本</button><hr><h2>关于</h2><p>WebMCP Script <span id="version"></span></p><p class="muted">脚本编辑器使用 CodeMirror 6（MIT）。仅安装可信来源的脚本。</p></section>
+</main>
+<dialog id="preview-dialog" aria-labelledby="preview-title"><h2 id="preview-title">确认保存</h2><dl><dt>名称</dt><dd id="preview-name"></dd><dt>版本</dt><dd id="preview-version"></dd><dt>网站范围</dt><dd id="preview-matches"></dd><dt>状态</dt><dd id="preview-state"></dd></dl><p id="scope-change" class="muted"></p><p class="muted">脚本可读取和操作这些网站。确认后保存并尝试加载到匹配页面。</p><p id="preview-error" class="error" role="alert" hidden></p><div class="dialog-actions"><button id="cancel-save" autofocus>取消</button><button id="confirm-save">确认保存</button></div></dialog>
+<script type="module" src="manager.js"></script>
 </body></html>

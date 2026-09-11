@@ -25,7 +25,7 @@ async function call(name,args={},peer=client) {const result=await peer.callTool(
 async function until(fn,timeout=12000){const start=Date.now();let last;do{try {return await fn();}catch(e){last=e;await new Promise(r=>setTimeout(r,150));}}while(Date.now()-start<timeout);throw last;}
 try {
   client=await connect();
-  context=await chromium.launchPersistentContext(await mkdtemp(resolve(work,'e2e-')),{channel:'chromium',headless:false,args:[`--disable-extensions-except=${resolve(root,testedArtifact)}`,`--load-extension=${resolve(root,testedArtifact)}`]});
+  context=await chromium.launchPersistentContext(await mkdtemp(resolve(work,'e2e-')),{channel:'chromium',headless:false,args:['--enable-features=WebMCPTesting',`--disable-extensions-except=${resolve(root,testedArtifact)}`,`--load-extension=${resolve(root,testedArtifact)}`]});
   const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');
   const id=new URL(worker.url()).host;
   const settings=await context.newPage();await settings.goto('chrome://extensions/?id='+id);
@@ -56,13 +56,16 @@ try {
   assert(snapshot.tools.every(t=>!('inputSchema'in t)));record('MCP visit returns summaries without full schemas');
   const args={pageId,revision:snapshot.revision,name:'local-demo__sum'};
   const schema=await call('describe_tool',args);assert.equal(schema.inputSchema.properties.a.type,'number');
-  assert.equal((await call('call_tool',{...args,input:{a:7,b:5}})).result.sum,12);record('MCP describe and call execute independent script in real Chrome');
-  await assert.rejects(()=>call('call_tool',{...args,input:{a:'x',b:2}}),/有限数字/);record('script rejects invalid input through MCP');
-  record('native WebMCP API available='+snapshot.native);
+  assert.equal(JSON.parse((await call('call_tool',{...args,input:{a:7,b:5}})).result).sum,12);record('MCP describe and call execute independent script in real Chrome');
+  await assert.rejects(()=>call('call_tool',{...args,input:{a:'x',b:2}}),/有限数字|number|schema|Invalid|invalid|invocation failed/);record('script rejects invalid input through MCP');
+  assert.equal(snapshot.native,true);record('native WebMCP API available=true');
   client2=await connect();
   const parallel=await Promise.all([call('inspect_page',{pageId}),call('inspect_page',{pageId},client2)]);assert.equal(parallel[0].revision,parallel[1].revision);record('two MCP clients share one browser relay concurrently');
-  await client.close();client=client2;assert.equal((await call('call_tool',{...args,input:{a:3,b:4}})).result.sum,7);record('closing first MCP client preserves second client browser calls');
-  let page;for(const candidate of context.pages()){if(await candidate.evaluate(()=>globalThis.WebMCPScript?.snapshot().revision).catch(()=>null)===snapshot.revision)page=candidate;}assert(page,'bind exact MCP document revision to Playwright Page');
+  await client.close();client=client2;assert.equal(JSON.parse((await call('call_tool',{...args,input:{a:3,b:4}})).result).sum,7);record('closing first MCP client preserves second client browser calls');
+  let page;for(const candidate of context.pages()){if(await candidate.evaluate(async()=>(await globalThis.WebMCPScript?.snapshot())?.revision).catch(()=>null)===snapshot.revision)page=candidate;}assert(page,'bind exact MCP document revision to Playwright Page');
+  await page.evaluate(async()=>{await document.modelContext.registerTool({name:'website_native',description:'Website native tool',inputSchema:{type:'object',properties:{},additionalProperties:false},execute:()=> 'website-ok'});});
+  const nativeSnapshot=await until(async()=>{const s=await inspect();assert.equal(s.tools.length,3);return s;});
+  assert.equal((await call('call_tool',{pageId,revision:nativeSnapshot.revision,name:'website_native',input:{}})).result,'website-ok');record('website-owned native tool is discovered and called through the same bridge');
   await page.reload();const refreshed=await until(async()=>{const s=await inspect();assert.notEqual(s.revision,snapshot.revision);assert.equal(s.tools.length,2);return s;});
   await assert.rejects(()=>call('call_tool',{...args,input:{a:1,b:2}}),/变化|STALE/);record('refresh keeps one registration and rejects stale revision');
   await manager.getByRole('button',{name:'停用',exact:true}).click();await until(async()=>assert.equal((await inspect()).tools.length,0));
@@ -72,19 +75,19 @@ try {
   const chooserPromise=manager.waitForEvent('filechooser');await manager.locator('.manage summary').click();await manager.getByRole('button',{name:'替换 / 更新',exact:true}).click();
   await(await chooserPromise).setFiles({name:'local-demo.user.js',mimeType:'text/javascript',buffer:Buffer.from(updated)});
   await manager.locator('#preview-dialog').waitFor();await manager.locator('#confirm-install').click();
-  await until(async()=>{const s=await inspect();assert.equal((await call('call_tool',{pageId,revision:s.revision,name:'local-demo__sum',input:{a:1,b:2}})).result.sum,103);});record('update replaces active code without duplicate registration');
+  await until(async()=>{const s=await inspect();assert.equal(JSON.parse((await call('call_tool',{pageId,revision:s.revision,name:'local-demo__sum',input:{a:1,b:2}})).result).sum,103);});record('update replaces active code without duplicate registration');
   if(!process.env.SKIP_SYNTAX){const badChooser=manager.waitForEvent('filechooser');await manager.locator('.manage summary').click();await manager.getByRole('button',{name:'替换 / 更新',exact:true}).click();
   await(await badChooser).setFiles({name:'broken.user.js',mimeType:'text/javascript',buffer:Buffer.from(updated+'\nconst = ;')});
   await manager.locator('#preview-dialog').waitFor();await manager.locator('#confirm-install').click();
   await until(async()=>assert.notEqual(await manager.locator('#error').innerText(),''));record('syntax error is visible in manager');
-  const afterInvalid=await inspect();assert.equal((await call('call_tool',{pageId,revision:afterInvalid.revision,name:'local-demo__sum',input:{a:1,b:2}})).result.sum,103);record('invalid update preserves previous working script');
+  const afterInvalid=await inspect();assert.equal(JSON.parse((await call('call_tool',{pageId,revision:afterInvalid.revision,name:'local-demo__sum',input:{a:1,b:2}})).result).sum,103);record('invalid update preserves previous working script');
   await manager.screenshot({path:resolve(evidence,'script-error.png'),fullPage:false});await manager.locator('#cancel-install').click();}
   await manager.locator('.manage summary').click();await manager.getByRole('button',{name:'恢复上一版',exact:true}).click();await manager.locator('#confirm-install').click();
-  await until(async()=>{const s=await inspect();assert.equal((await call('call_tool',{pageId,revision:s.revision,name:'local-demo__sum',input:{a:1,b:2}})).result.sum,3);});record('restore previous version returns original script behavior');
+  await until(async()=>{const s=await inspect();assert.equal(JSON.parse((await call('call_tool',{pageId,revision:s.revision,name:'local-demo__sum',input:{a:1,b:2}})).result).sum,3);});record('restore previous version returns original script behavior');
   await manager.getByRole('button',{name:'停用',exact:true}).click();await until(async()=>assert.equal((await inspect()).tools.length,0));
   const disabledUpdate=manager.waitForEvent('filechooser');await manager.locator('.manage summary').click();await manager.getByRole('button',{name:'替换 / 更新',exact:true}).click();await(await disabledUpdate).setFiles({name:'local-demo.user.js',mimeType:'text/javascript',buffer:Buffer.from(updated)});await manager.locator('#confirm-install').click();
   await until(async()=>{assert.equal((await inspect()).tools.length,0);assert(await manager.getByRole('button',{name:'启用',exact:true}).count());});record('updating a disabled script preserves disabled state');
-  await manager.getByRole('button',{name:'启用',exact:true}).click();await until(async()=>{const s=await inspect();assert.equal((await call('call_tool',{pageId,revision:s.revision,name:'local-demo__sum',input:{a:1,b:2}})).result.sum,103);});record('enabling updated disabled script runs the new version');
+  await manager.getByRole('button',{name:'启用',exact:true}).click();await until(async()=>{const s=await inspect();assert.equal(JSON.parse((await call('call_tool',{pageId,revision:s.revision,name:'local-demo__sum',input:{a:1,b:2}})).result).sum,103);});record('enabling updated disabled script runs the new version');
   await manager.locator('.manage summary').click();await manager.getByRole('button',{name:'卸载',exact:true}).click();await manager.locator('#cancel-remove').click();assert.equal((await inspect()).tools.length,2);record('cancel uninstall keeps script and tools');await manager.locator('.manage summary').click();await manager.getByRole('button',{name:'卸载',exact:true}).click();await manager.locator('#confirm-remove').click();await until(async()=>assert.equal((await inspect()).tools.length,0));record('uninstall removes current page tools');
   await manager.locator('#import').setInputFiles(resolve(root,'dist/examples/route-demo.user.js'));await manager.locator('#confirm-install').click();await manager.getByRole('button',{name:'停用',exact:true}).waitFor();
   await page.evaluate(()=>history.pushState({},'','/only'));await until(async()=>assert.equal((await inspect()).tools.length,2));

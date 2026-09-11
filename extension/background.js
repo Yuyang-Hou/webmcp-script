@@ -1,8 +1,41 @@
 import {prepareImport} from './metadata.js';
+import {parsePairing} from './connection.js';
 let socket, connecting = false, bridgeStatus = '未配对', lastError = '', mutation = Promise.resolve();
 const runtimeCode = fetch(chrome.runtime.getURL('runtime.js')).then(r => r.text());
 const settings = async () => ({scripts:[], token:'', port:17891, ...await chrome.storage.local.get(['scripts','token','port'])});
 const notify = () => { if (socket?.readyState === 1) socket.send(JSON.stringify({type:'changed'})); };
+const badgeRequests = new Map();
+async function refreshBadge(tabId, loading=false) {
+  const request=Symbol();badgeRequests.set(tabId,request);
+  const paint=async(text,color,title)=>{
+    if(badgeRequests.get(tabId)!==request)return;
+    await Promise.all([
+      chrome.action.setBadgeText({tabId,text}),
+      chrome.action.setBadgeBackgroundColor({tabId,color}),
+      chrome.action.setBadgeTextColor({tabId,color:'#ffffff'}),
+      chrome.action.setTitle({tabId,title:`WebMCP Script · ${title}`})
+    ]);
+  };
+  try {
+    if(bridgeStatus!=='已连接')return await paint(bridgeStatus==='连接中…'?'':'!',bridgeStatus==='未配对'?'#986b24':'#b4483c',bridgeStatus);
+    const tab=await chrome.tabs.get(tabId);
+    if(!/^https?:/.test(tab.url||''))return await paint('','#737780','此页面不支持读取 WebMCP');
+    await paint('','#737780','本地桥接已连接 · 正在检测页面工具');
+    if(loading||tab.status==='loading')return;
+    const snapshot=await page(tabId,'inspect');
+    if(snapshot.native===false)return await paint('','#737780','浏览器未提供原生 WebMCP 接口');
+    if(snapshot.errors?.length)return await paint('!','#b4483c','页面工具异常 · 打开插件查看详情');
+    if(snapshot.native!==true||!Array.isArray(snapshot.tools))return await paint('?','#986b24','页面工具尚未就绪');
+    const count=snapshot.tools.length;
+    await paint(count>99?'99+':String(count),count?'#28834d':'#737780',`本地桥接已连接 · 当前页 ${count} 个 WebMCP 工具`);
+  } catch {
+    await paint('?','#986b24','无法读取页面工具 · 打开插件查看详情').catch(()=>{});
+  }
+}
+async function refreshBadges() {
+  try {await Promise.all((await chrome.tabs.query({})).map(tab=>refreshBadge(tab.id)));}catch{}
+}
+function setBridgeStatus(status) {bridgeStatus=status;void refreshBadges();}
 function api() {
   if (!chrome.userScripts?.execute) throw Error('请在 chrome://extensions 的 WebMCP Script 详情中开启“允许用户脚本”（旧版 Chrome 开启开发者模式）');
   return chrome.userScripts;
@@ -15,12 +48,40 @@ async function execute(injection) {
 }
 async function checkSyntax(script) {
   const tab=(await chrome.tabs.query({})).find(tab=>/^https?:/.test(tab.url||''));
-  if(!tab) throw Error('请先打开一个普通 HTTP(S) 网页，再导入脚本；原有脚本已保留');
+  if(!tab) throw Error('请先打开一个普通 HTTP(S) 网页，再保存脚本；原有脚本已保留');
   const results=await execute({target:{tabId:tab.id},world:'MAIN',js:[{code:`(() => {\n${script.source}\n}); true;`}]});
   if(!results.some(result=>result.result===true)) throw Error('脚本语法检查失败，原有脚本已保留');
 }
 async function sourceFor(script) {
-  return `${await runtimeCode}\n(() => { let installed = false; const WebMCPScript = {...globalThis.WebMCPScript, install(spec) { if(spec.id !== ${JSON.stringify(script.id)}) throw Error('脚本 ID 与元数据不一致'); globalThis.WebMCPScript.install({...spec,matches:${JSON.stringify(script.matches)}}); installed = true; }}; try {\n${script.source}\nif (!installed) throw Error('脚本没有调用 WebMCPScript.install');\n} catch (e) { WebMCPScript.request('error', {id:${JSON.stringify(script.id)},message:e.message}); } })();\n//# sourceURL=webmcp-script-${script.id}.user.js`;
+  return `${await runtimeCode}
+(() => {
+  const runs = globalThis[Symbol.for('webmcp-script.executions')] ||= new Map();
+  const id = ${JSON.stringify(script.id)}, source = ${JSON.stringify(script.source)};
+  const previous = runs.get(id);
+  if (previous?.disabled) throw Error('脚本已重新启用，请刷新此页面以加载工具');
+  if (previous && !previous.helper) {
+    if (previous.source !== source) throw Error('脚本已更新，请刷新此页面以加载新版本');
+    return;
+  }
+  const record = {source, helper:false};
+  if(globalThis.WebMCPScript.lifecycleVersion!==1) throw Error('页面连接需要更新，请刷新网页后重试');
+  const endScript=globalThis.WebMCPScript.beginScript(id,${JSON.stringify(script.name)},previous?.helper);
+  runs.set(id, record);
+  const WebMCPScript = {...globalThis.WebMCPScript, install(spec) {
+    if(spec.id !== id) throw Error('脚本 ID 与元数据不一致');
+    globalThis.WebMCPScript.install({...spec,matches:${JSON.stringify(script.matches)}});
+    record.helper = true;
+  }};
+  try {
+${script.source}
+  } catch (error) {
+    // A script may have partially executed: do not repeat it in this document.
+    record.helper = false;
+    WebMCPScript.request('error', {id,message:error.message});
+    throw error;
+  } finally {endScript();}
+})();
+//# sourceURL=webmcp-script-${script.id}.user.js`;
 }
 async function page(pageId, method, params={}) {
   if (!Number.isInteger(Number(pageId))) throw Error('无效 pageId');
@@ -52,11 +113,20 @@ async function apply(scripts, removed=[]) {
   const tabs = await chrome.tabs.query({});
   await Promise.all(tabs.filter(t=>/^https?:/.test(t.url||'')).map(async tab=> {
     try {
-      for (const id of removed) await page(tab.id,'remove',{id}).catch(()=>{});
+      for (const id of removed) {
+        await execute({target:{tabId:tab.id},world:'MAIN',js:[{code:`(async () => {
+          const run = globalThis[Symbol.for('webmcp-script.executions')]?.get(${JSON.stringify(id)});
+          if(!run)return;
+          if (globalThis.WebMCPScript?.lifecycleVersion!==1) throw Error('旧页面无法撤销脚本工具，请刷新页面完成停用');
+          if(!run.helper)run.disabled=true;
+          await globalThis.WebMCPScript.request('remove',{id:${JSON.stringify(id)}});
+        })();`}]});
+      }
       await inject(tab,scripts);
     } catch(e) { lastError = `${tab.url}: ${e.message}`; }
   }));
   notify();
+  void refreshBadges();
 }
 async function dispatch(method,params={}) {
   if (method === 'pages') {
@@ -78,14 +148,14 @@ async function connect() {
   connecting=true;
   const {token,port:storedPort}=await settings();
   const port=Number(storedPort);
-  if(!Number.isInteger(port)||port<1||port>65535) {bridgeStatus='本地端口无效，请重新配对';connecting=false;return;}
-  if (!token) {bridgeStatus='未配对';connecting=false;return;}
-  bridgeStatus='连接中…';
+  if(!Number.isInteger(port)||port<1||port>65535) {setBridgeStatus('本地端口无效，请重新配对');connecting=false;return;}
+  if (!token) {setBridgeStatus('未配对');connecting=false;return;}
+  setBridgeStatus('连接中…');
   const ws=new WebSocket(`ws://127.0.0.1:${port}/extension?token=${encodeURIComponent(token)}`);
   socket=ws;
-  ws.onopen=()=>{if(socket!==ws)return;connecting=false;bridgeStatus='已连接';ws.send(JSON.stringify({type:'hello',version:'0.3.0'}));};
-  ws.onclose=()=>{if(socket!==ws)return;connecting=false;bridgeStatus='连接断开，自动重连中';setTimeout(connect,3000);};
-  ws.onerror=()=>{if(socket===ws)bridgeStatus='本地桥接连接失败';};
+  ws.onopen=()=>{if(socket!==ws)return;connecting=false;setBridgeStatus('已连接');ws.send(JSON.stringify({type:'hello',version:'0.4.0-beta.1'}));};
+  ws.onclose=()=>{if(socket!==ws)return;connecting=false;setBridgeStatus('连接断开，自动重连中');setTimeout(connect,3000);};
+  ws.onerror=()=>{if(socket===ws)setBridgeStatus('本地桥接连接失败');};
   ws.onmessage=async event=> {
     let message;
     try { message=JSON.parse(event.data); if(message.type==='ping') {if(ws.readyState===1)ws.send(JSON.stringify({type:'pong'}));return;} if(!message.id || !message.method) return;
@@ -95,22 +165,26 @@ async function connect() {
 }
 chrome.alarms.create('reconnect',{periodInMinutes:0.5});
 chrome.alarms.onAlarm.addListener(connect);
-chrome.tabs.onRemoved.addListener(notify);
-chrome.tabs.onUpdated.addListener((id,change)=>{if(change.url || change.status==='complete') notify();});
+chrome.tabs.onRemoved.addListener(id=>{badgeRequests.delete(id);notify();});
+chrome.tabs.onActivated.addListener(({tabId})=>{void refreshBadge(tabId);});
+chrome.tabs.onUpdated.addListener((id,change)=>{if(change.url || change.status) {notify();void refreshBadge(id,change.status==='loading');}});
 chrome.webNavigation.onHistoryStateUpdated.addListener(async details=>{
   if(details.frameId!==0) return;
   mutation=mutation.catch(()=>{}).then(async()=>{
     try { await inject(await chrome.tabs.get(details.tabId),(await settings()).scripts); } catch(e) {lastError=e.message;}
     notify();
+    void refreshBadge(details.tabId);
   });
   await mutation;
 });
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
-  if(message.type==='changed') {if(sender.tab && message.errors?.length) lastError=String(message.errors.at(-1));notify();return;}
+  if(message.type==='changed') {if(sender.tab && sender.frameId===0){if(message.errors?.length)lastError=String(message.errors.at(-1));void refreshBadge(sender.tab.id);}notify();return;}
   if(!sender.url?.startsWith(chrome.runtime.getURL(''))) return;
   const action=async()=>{
     if(message.type==='status') {let available=true;try {await api().getScripts();} catch(e) {available=false;lastError=e.message;} return {...await settings(),bridgeStatus,lastError,userScriptsAvailable:available};}
-    if(message.type==='pair') {const port=Number(message.port??17891);if(!Number.isInteger(port)||port<1||port>65535)throw Error('本地端口须为 1–65535 的整数');await chrome.storage.local.set({token:message.token.trim(),port});socket?.close();socket=undefined;connecting=false;await connect();return {ok:true};}
+    if(message.type==='pages') return dispatch('pages');
+    if(message.type==='inspect') return dispatch('inspect',{pageId:message.pageId});
+    if(message.type==='pair') {const {token,port}=parsePairing(message.token,message.port??17891);await chrome.storage.local.set({token,port});socket?.close();socket=undefined;connecting=false;await connect();return {ok:true};}
     if(message.type==='retry') {const state=await settings();await apply(state.scripts);await connect();return {ok:true};}
     const state=await settings(); let scripts=state.scripts, removed=[];
     if(message.type==='import') {

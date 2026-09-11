@@ -13,7 +13,7 @@ try {token=(await readFile(tokenPath,'utf8')).trim();} catch(e) {if(e.code!=='EN
 const demo=spawn(process.execPath,['scripts/demo.mjs'],{cwd:root,stdio:'inherit'});
 let context;
 try {
-  context=await chromium.launchPersistentContext(resolve(root,'.local/preview-profile'),{channel:'chromium',headless:false,args:[`--disable-extensions-except=${resolve(root,'dist/extension')}`,`--load-extension=${resolve(root,'dist/extension')}`]});
+  context=await chromium.launchPersistentContext(resolve(root,'.local/preview-profile'),{channel:'chromium',headless:false,args:['--enable-features=WebMCPTesting',`--disable-extensions-except=${resolve(root,'dist/extension')}`,`--load-extension=${resolve(root,'dist/extension')}`]});
   const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');
   const id=new URL(worker.url()).host;
   const settings=await context.newPage();await settings.goto('chrome://extensions/?id='+id);

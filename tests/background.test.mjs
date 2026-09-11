@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {prepareImport} from '../extension/metadata.js';
+import {parsePairing} from '../extension/connection.js';
 const sockets=[];
 class WebSocket {
   constructor(){this.readyState=0;this.sent=[];sockets.push(this);}
@@ -9,10 +10,12 @@ class WebSocket {
   close(){this.readyState=3;this.onclose?.();}
   open(){this.readyState=1;this.onopen?.();}
 }
-let release, onMessage, onHistory, storedScripts=[];
+let release, onMessage, onHistory, onUpdated, onActivated, onRemoved, storedScripts=[];
 const listener={addListener(){}};
-const context=vm.createContext({WebSocket,URL,setTimeout(){},fetch:async()=>({text:async()=>''}),chrome:{storage:{local:{get:async()=>({scripts:storedScripts,token:'test-token'})}},runtime:{getURL:p=>'chrome-extension://test/'+p,onInstalled:listener,onMessage:{addListener(handler){onMessage=handler;}}},alarms:{create(){},onAlarm:listener},tabs:{onRemoved:listener,onUpdated:listener,sendMessage:()=>new Promise(r=>release=r)},webNavigation:{onHistoryStateUpdated:{addListener(handler){onHistory=handler;}}}}});
-const source=fs.readFileSync(new URL('../extension/background.js',import.meta.url),'utf8').replace("import {prepareImport} from './metadata.js';",'');
+const badges=new Map(),titles=new Map();
+const context=vm.createContext({WebSocket,URL,setTimeout(){},fetch:async()=>({text:async()=>''}),chrome:{action:{setBadgeText:async({tabId,text})=>badges.set(tabId,text),setBadgeBackgroundColor:async()=>{},setBadgeTextColor:async()=>{},setTitle:async({tabId,title})=>titles.set(tabId,title)},storage:{local:{get:async()=>({scripts:storedScripts,token:'test-token'})}},runtime:{getURL:p=>'chrome-extension://test/'+p,onInstalled:listener,onMessage:{addListener(handler){onMessage=handler;}}},alarms:{create(){},onAlarm:listener},tabs:{query:async()=>[],onRemoved:{addListener(handler){onRemoved=handler;}},onUpdated:{addListener(handler){onUpdated=handler;}},onActivated:{addListener(handler){onActivated=handler;}},sendMessage:()=>new Promise(r=>release=r)},webNavigation:{onHistoryStateUpdated:{addListener(handler){onHistory=handler;}}}}});
+context.parsePairing=parsePairing;
+const source=fs.readFileSync(new URL('../extension/background.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'');
 vm.runInContext(source,context);
 await new Promise(setImmediate);
 sockets[0].open();
@@ -44,7 +47,7 @@ await Promise.resolve();assert.equal(context.injected.length,0);
 storedScripts=[];context.finishMutation();await historyTask;
 assert.deepEqual(Array.from(context.injected[0]),[]);
 for(const port of [0,65536,1.5,'not-a-port']) {
-  const response=await new Promise(resolve=>onMessage({type:'pair',token:'test',port},{url:'chrome-extension://test/manager.html'},resolve));
+  const response=await new Promise(resolve=>onMessage({type:'pair',token:'a'.repeat(64),port},{url:'chrome-extension://test/manager.html'},resolve));
   assert.match(response.error.message,/端口/);
 }
 context.prepareImport=prepareImport;
@@ -62,3 +65,53 @@ const before=sockets.length;context.chrome.storage.local.get=async()=>({token:'t
 await vm.runInContext('socket.close();socket=undefined;connecting=false;connect()',context);
 assert.equal(sockets.length,before);assert.match(vm.runInContext('bridgeStatus',context),/端口无效/);
 console.log('background: disconnected call never replies to a replacement connection');
+context.chrome.tabs.query=async()=>[{id:7,url:'https://example.com/',title:'Native site'}];
+context.chrome.tabs.sendMessage=async()=>({result:{native:true,implementation:'native-0.4',tools:[{name:'website_native'}]}});
+const uiPages=await new Promise(resolve=>onMessage({type:'pages'},{url:'chrome-extension://test/manager.html'},resolve));
+assert.equal(uiPages.result.pages[0].tools[0].name,'website_native');
+const uiInspect=await new Promise(resolve=>onMessage({type:'inspect',pageId:7},{url:'chrome-extension://test/popup.html'},resolve));
+assert.equal(uiInspect.result.pageId,7);
+assert.equal(onMessage({type:'pages'},{url:'https://example.com/'},()=>assert.fail('website cannot access manager messages')),undefined);
+
+// The production wrapper accepts plain scripts and does not repeat side effects.
+const ordinary={id:'ordinary',matches:['https://example.com/*'],source:"document.modelContext.registerTool({name:'site_read'});"};
+const ordinaryCode=await vm.runInContext(`sourceFor(${JSON.stringify(ordinary)})`,context);
+let nativeRegistrations=0;const pageErrors=[];
+const nativePage=vm.createContext({document:{modelContext:{registerTool(){nativeRegistrations++;}}},WebMCPScript:{lifecycleVersion:1,beginScript(){return ()=>{};},request(_method,params){pageErrors.push(params.message);}}});
+vm.runInContext(ordinaryCode,nativePage);vm.runInContext(ordinaryCode,nativePage);
+assert.equal(nativeRegistrations,1);assert.deepEqual(pageErrors,[]);
+const changedCode=await vm.runInContext(`sourceFor(${JSON.stringify({...ordinary,source:ordinary.source+'// update'})})`,context);
+assert.throws(()=>vm.runInContext(changedCode,nativePage),/刷新/);assert.equal(nativeRegistrations,1);
+const partialCode=await vm.runInContext(`sourceFor(${JSON.stringify({...ordinary,id:'partial',source:"globalThis.partial=(globalThis.partial||0)+1;throw Error('partial failure');"})})`,context);
+assert.throws(()=>vm.runInContext(partialCode,nativePage),/partial failure/);vm.runInContext(partialCode,nativePage);assert.equal(nativePage.partial,1);
+
+// Badges describe this tab's native tools, with connection failures taking priority.
+await new Promise(setImmediate);
+context.chrome.tabs.query=async()=>[{id:7},{id:8}];
+context.chrome.tabs.get=async id=>({id,url:'https://example.com/',status:'complete'});
+let snapshot={native:true,tools:[{name:'site_native'},{name:'script_native'}]};
+context.chrome.tabs.sendMessage=async()=>({result:snapshot});
+await vm.runInContext("bridgeStatus='已连接';refreshBadge(7)",context);
+assert.equal(badges.get(7),'2');assert.match(titles.get(7),/当前页 2 个/);
+snapshot={native:true,tools:[]};onActivated({tabId:8});await new Promise(setImmediate);
+assert.equal(badges.get(8),'0');assert.equal(badges.get(7),'2');
+snapshot={native:true,tools:Array.from({length:100},()=>({}))};
+onMessage({type:'changed'},{tab:{id:7},frameId:0},()=>{});await new Promise(setImmediate);
+assert.equal(badges.get(7),'99+');assert.match(titles.get(7),/100 个/);
+snapshot={native:false,tools:[]};await vm.runInContext('refreshBadge(7)',context);assert.equal(badges.get(7),'');
+snapshot={native:true,tools:[],errors:['registration failed']};await vm.runInContext('refreshBadge(7)',context);assert.equal(badges.get(7),'!');
+context.chrome.tabs.sendMessage=async()=>{throw Error('not ready');};
+await vm.runInContext('refreshBadge(7)',context);assert.equal(badges.get(7),'?');
+let finishInspect;context.chrome.tabs.sendMessage=()=>new Promise(resolve=>finishInspect=resolve);
+const stale=vm.runInContext('refreshBadge(7)',context);await new Promise(setImmediate);
+onUpdated(7,{status:'loading'});await new Promise(setImmediate);
+assert.equal(badges.get(7),'');
+finishInspect({result:{native:true,tools:[{}]}});await stale;assert.equal(badges.get(7),'');
+context.chrome.tabs.sendMessage=async()=>({result:{native:true,tools:[{},{}]}});
+vm.runInContext("setBridgeStatus('连接断开，自动重连中')",context);await new Promise(setImmediate);
+assert.equal(badges.get(7),'!');assert.equal(badges.get(8),'!');assert.match(titles.get(7),/连接断开/);
+vm.runInContext("setBridgeStatus('已连接')",context);await new Promise(setImmediate);assert.equal(badges.get(7),'2');
+context.chrome.tabs.get=async id=>({id,url:'chrome://newtab/'});
+await vm.runInContext('refreshBadge(7)',context);assert.equal(badges.get(7),'');
+onRemoved(7);assert.equal(vm.runInContext('badgeRequests.has(7)',context),false);
+console.log('badges: native counts, per-tab updates, failures, reconnect and stale navigation results checked');
