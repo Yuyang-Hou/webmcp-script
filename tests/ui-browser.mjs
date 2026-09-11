@@ -96,8 +96,10 @@ try{
   const lineColor=await page.locator('.cm-activeLine').evaluate(el=>getComputedStyle(el).backgroundColor);
   assert(lineColor.startsWith('rgba(')&&Number(lineColor.match(/, ([\d.]+)\)$/)?.[1])<1,`active line must be translucent: ${lineColor}`);
   await page.screenshot({path:resolve(evidence,'单行选中.png')});
+  // Start on a different row so rapid gestures are not interpreted as a double-click on Linux.
+  const secondLine=await page.locator('.cm-line').nth(1).boundingBox();
   const thirdLine=await page.locator('.cm-line').nth(2).boundingBox();
-  await page.mouse.move(line.x+18,line.y+line.height/2);await page.mouse.down();await page.mouse.move(thirdLine.x+130,thirdLine.y+thirdLine.height/2,{steps:10});await page.mouse.up();
+  await page.mouse.move(secondLine.x+18,secondLine.y+secondLine.height/2);await page.mouse.down();await page.mouse.move(thirdLine.x+130,thirdLine.y+thirdLine.height/2,{steps:10});await page.mouse.up();
   assert((await page.evaluate(()=>getSelection().toString())).includes('\n'));await page.screenshot({path:resolve(evidence,'多行选中.png')});
   pass('single-line and multiline drag selection stay visible on the active line');
   const updated=sample.replace('1.0.0','1.1.0');
