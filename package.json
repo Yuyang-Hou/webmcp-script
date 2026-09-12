@@ -1,6 +1,6 @@
 {
   "name": "webmcp-script",
-  "version": "0.4.0-beta.1",
+  "version": "0.4.0-beta.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,7 +14,9 @@
     "scripts": "node scripts/library.mjs",
     "check:spec": "openspec validate --all --strict",
     "pretest": "pnpm build",
-    "test:ui": "pnpm build && node tests/ui-browser.mjs"
+    "test:ui": "pnpm build && node tests/ui-browser.mjs",
+    "package": "node scripts/package.mjs",
+    "test:package": "pnpm package && node tests/package.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.0",

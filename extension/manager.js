@@ -1,5 +1,5 @@
 import {prepareImport,createScriptTemplate} from './metadata.js';
-import {parsePairing,connectionInstructions} from './connection.js';
+import {parsePairing,connectionInstructions,connectionChecks} from './connection.js';
 import {$,send,element,discovery,connection,matchesURL,toolSource} from './ui.js';
 let scripts=[], pages=[], draft, editor, pending, busy=false;
 let noticeTimer;
@@ -153,8 +153,16 @@ async function copyConnection(text) {
   try {await navigator.clipboard.writeText(text);$('connection-copy-fallback').hidden=true;$('copy-feedback').textContent='已复制，粘贴到 AI 对话中继续。';}
   catch {$('connection-copy-fallback').value=text;$('connection-copy-fallback').hidden=false;$('connection-copy-fallback').focus();$('connection-copy-fallback').select();$('copy-feedback').textContent='浏览器未允许自动复制，请复制下方已选中的内容。';}
 }
-$('copy-connection').onclick=()=>copyConnection(connectionInstructions(connectionConfig));
+$('copy-connection').onclick=()=>copyConnection(connectionInstructions(connectionConfig,chrome.runtime.getManifest().version_name));
 $('copy-config').onclick=()=>copyConnection(JSON.stringify(connectionConfig,null,2));
+$('check-connection').onclick=()=>run(async()=>{
+  $('check-connection').disabled=true;
+  try{
+    await refresh();
+    const state=await send({type:'status'});
+    $('connection-checks').replaceChildren(...connectionChecks(state,pages).map(text=>element('li',text)));
+  }finally{$('check-connection').disabled=false;}
+});
 async function route() {
   if(location.hash==='#new'){await selectNew();return;}
   if(location.hash.startsWith('#edit/')){
@@ -171,10 +179,11 @@ window.addEventListener('hashchange',()=>run(route));
 window.addEventListener('beforeunload',e=>{if(dirty()||busy){e.preventDefault();e.returnValue='';}});
 window.addEventListener('focus',()=>run(refresh));
 async function init() {
-  $('version').textContent=chrome.runtime.getManifest().version;
+  $('version').textContent=chrome.runtime.getManifest().version_name||chrome.runtime.getManifest().version;
   fetch(chrome.runtime.getURL('connection-config.json')).then(response=>{if(!response.ok)throw Error();return response.json();}).then(config=>{
-    connectionConfig=config;$('mcp-config').value=JSON.stringify(config,null,2);$('copy-connection').disabled=false;$('copy-config').disabled=false;
-  }).catch(()=>{$('copy-feedback').textContent='此扩展缺少本机安装信息，请在产品目录重新运行 pnpm build 后重载扩展。';});
+    connectionConfig=config;$('mcp-config').value=config?JSON.stringify(config,null,2):'';$('copy-connection').disabled=false;$('copy-config').disabled=!config;
+    $('portable-setup').hidden=!!config;
+  }).catch(()=>{$('copy-feedback').textContent='安装信息无法读取。请重新解压完整发布包；从源码安装时请重新构建。';});
   const state=await send({type:'status'});$('port').value=state.port??17891;scripts=state.scripts;updateStatus(state);
   try {const stored=JSON.parse(sessionStorage.getItem('script-draft'));if(stored&&typeof stored.source==='string'){draft={...stored,newTab:stored.newTab??!stored.base};await mountEditor();}}catch{message('error','暂存草稿无法读取。');}
   await route();view();await refresh();

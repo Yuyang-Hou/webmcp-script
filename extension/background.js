@@ -153,7 +153,7 @@ async function connect() {
   setBridgeStatus('连接中…');
   const ws=new WebSocket(`ws://127.0.0.1:${port}/extension?token=${encodeURIComponent(token)}`);
   socket=ws;
-  ws.onopen=()=>{if(socket!==ws)return;connecting=false;setBridgeStatus('已连接');ws.send(JSON.stringify({type:'hello',version:'0.4.0-beta.1'}));};
+  ws.onopen=()=>{if(socket!==ws)return;connecting=false;setBridgeStatus('已连接');ws.send(JSON.stringify({type:'hello',version:'0.4.0-beta.2'}));};
   ws.onclose=()=>{if(socket!==ws)return;connecting=false;setBridgeStatus('连接断开，自动重连中');setTimeout(connect,3000);};
   ws.onerror=()=>{if(socket===ws)setBridgeStatus('本地桥接连接失败');};
   ws.onmessage=async event=> {

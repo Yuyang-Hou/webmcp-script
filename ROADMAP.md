@@ -3,8 +3,8 @@
 按用户目标推进，完成以验收结果为准。
 
 - [x] 独立 GitHub 项目维护基础：CI、依赖更新、贡献指南、问题模板。
-- [x] 界面：网页工具优先、脚本管理、连接引导、CodeMirror 编辑器、圆润小鸟标志、窄屏布局。
-- [ ] [首次安装体验](https://github.com/Yuyang-Hou/webmcp-script/issues/1)：从下载到首次工具调用完整自助走通，已提供 AI 连接说明和连接码；继续验证不同客户端的新用户安装。
+- [x] 界面：网页工具优先、脚本管理、连接引导、CodeMirror 编辑器、圆润恐龙头标志、窄屏布局。
+- [ ] [首次安装体验](https://github.com/Yuyang-Hou/webmcp-script/issues/1)：已提供预构建 ZIP、本机配置生成、AI 连接说明和只读连接检查；继续验证不同客户端的新用户完整安装。
 - [ ] [Codex 任意网站持久安装](https://github.com/Yuyang-Hou/webmcp-script/issues/2)：找到并实测支持的安装入口，不修改正在运行的宿主。
 - [ ] 跨平台验收矩阵：稳定 Chrome、Windows、Linux；按实际结果标注支持范围。
 

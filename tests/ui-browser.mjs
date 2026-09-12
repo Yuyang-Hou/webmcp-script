@@ -26,7 +26,7 @@ try{
     Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{if(fixture.clipboardDenied)throw Error('denied');fixture.clipboard=text;}}});
     window.chrome={runtime:{getManifest:()=>({version:'0.3.0'}),getURL:p=>location.origin+'/'+p,sendMessage:async message=>{
       const f=window.fixture;
-      if(message.type==='status')return {result:{scripts:structuredClone(f.scripts),port:17891,bridgeStatus:f.bridgeStatus||'已连接',userScriptsAvailable:true,lastError:''}};
+      if(message.type==='status')return {result:{scripts:structuredClone(f.scripts),port:17891,bridgeStatus:f.bridgeStatus||'已连接',userScriptsAvailable:f.userScriptsAvailable??true,lastError:''}};
       if(message.type==='pair'){if(f.fail)return {error:{message:'模拟连接保存失败'}};f.pair={token:message.token,port:message.port};f.bridgeStatus='连接中…';return {result:{ok:true}};}
       if(message.type==='pages')return {result:{pages:f.pages}};
       if(message.type==='inspect')return {result:f.pages[0]};
@@ -43,7 +43,7 @@ try{
   await page.goto(origin+'/manager.html');
   await page.locator('.brand img').waitFor();
   await page.waitForFunction(()=>document.querySelector('.brand img')?.naturalWidth===48);
-  pass('bird logo loads in manager at native 2x resolution');await page.getByRole('button',{name:'网页阅读助手',exact:true}).waitFor();
+  pass('dinosaur logo loads in manager at native 2x resolution');await page.getByRole('button',{name:'网页阅读助手',exact:true}).waitFor();
   const managerFonts=await page.evaluate(()=>Object.fromEntries(['html','body','.tab-rail a','.script-name','input[type=search]'].map(selector=>{const s=getComputedStyle(document.querySelector(selector));return [selector,{family:s.fontFamily,size:s.fontSize,lineHeight:s.lineHeight}];})));
   await writeFile(resolve(evidence,'manager-fonts.json'),JSON.stringify(managerFonts,null,2));
   await page.screenshot({path:resolve(evidence,'字体检查.png')});
@@ -256,6 +256,23 @@ try{
   await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.screenshot({path:resolve(evidence,'窄屏连接.png')});
   pass('guided connection: real local config, clipboard fallback, validation, embedded port, failure recovery and honest connected state');
+  await context.route('**/connection-config.json',route=>route.fulfill({contentType:'application/json',body:'null'}));
+  const portable=await context.newPage();await portable.setViewportSize({width:390,height:844});
+  await portable.goto(origin+'/manager.html#connection-settings');
+  await portable.locator('#copy-connection:enabled').click();
+  const portableInstructions=await portable.evaluate(()=>fixture.clipboard);
+  assert(portableInstructions.includes('node setup.mjs'));assert(!portableInstructions.includes(root));
+  assert(await portable.locator('#copy-config').isDisabled());
+  await portable.getByText('连接检查',{exact:true}).click();await portable.locator('#check-connection').click();
+  await portable.locator('#connection-checks').filter({hasText:'1 / 2'}).waitFor();
+  assert((await portable.locator('#connection-checks').innerText()).includes('仍需让 AI 调用 pages'));
+  await portable.evaluate(()=>{fixture.userScriptsAvailable=false;fixture.bridgeStatus='未配对';});
+  await portable.locator('#check-connection').click();await portable.locator('#connection-checks').filter({hasText:'尚未配对'}).waitFor();
+  assert((await portable.locator('#connection-checks').innerText()).includes('允许用户脚本'));
+  assert.equal(await portable.evaluate(()=>fixture.mutations),0);
+  assert(await portable.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await portable.screenshot({path:resolve(evidence,'预构建连接检查.png')});await portable.close();
+  pass('portable setup instructions contain no publisher path; connection checks explain permissions, relay and native support without mutations');
   assert.deepEqual(errors,[]);
   await writeFile(resolve(evidence,'result.json'),JSON.stringify({boundary:'HTTP renderer fixture with mocked Chrome messaging; not installed-extension acceptance',browser:browser.version(),checks},null,2));
 }finally{await browser?.close();await new Promise(r=>server.close(r));}

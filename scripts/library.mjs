@@ -1,3 +1,4 @@
+import {realpathSync} from 'node:fs';
 import {mkdir,readFile,writeFile,rename,rm,stat,readdir,lstat} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -110,7 +111,7 @@ export async function manageLibrary(action,args={},directory=process.env.WEBMCP_
   } finally {await rm(lock,{recursive:true,force:true});}
 }
 
-if(process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
+if(process.argv[1] && realpathSync(process.argv[1])===fileURLToPath(import.meta.url)) {
   const [action='status',json='{}']=process.argv.slice(2);
   try{console.log(JSON.stringify(await manageLibrary(action,JSON.parse(json)),null,2));}
   catch(error){console.error(error.message);process.exitCode=1;}

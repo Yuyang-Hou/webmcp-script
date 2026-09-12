@@ -8,4 +8,6 @@ UI 使用现有原生 HTML/CSS，设计依据见 `docs/ui-design.md`。验证桌
 
 每次发布更新版本、CHANGELOG，核对构建清单与浏览器验收来自同一产物。CI 不自动发布。依赖升级以 Dependabot PR 追踪，通过检查后再评估合并。
 
+发布前运行 `pnpm test:package`：生成 ZIP 并在独立临时目录验证，不借用源码的 node_modules。构建测试需要系统 zip/unzip，用户使用预构建包不需要这些开发工具。该测试使用模拟扩展传输，不代替真实浏览器验收。
+
 禁止提交 `.local`、配对码、浏览器 profile、真实业务数据或本机专属 `mcp-config.json`。公开截图也需脱敏。敏感问题按 SECURITY.md 的受限报告流程处理，不在 Issue 中粘贴凭据。

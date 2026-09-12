@@ -1,63 +1,62 @@
 # 安装与首次使用
 
-当前为 0.4.0-beta.1 开发者公测，分发源码包，需要在自己的电脑安装依赖并构建。没有商店一键安装或自动更新。
+0.4.0-beta.2 提供预构建 ZIP。加载扩展不需要终端；连接 AI 时需要本机 Node.js 22+。没有商店一键安装或自动更新。
 
 ## 1. 准备浏览器
 
 已实测 Chromium 153，并开启 WebMCPTesting。版本号本身不能保证接口可用。
 
-- 打开 `chrome://flags/#enable-webmcp-testing`，设为 Enabled，保存正在编辑的内容后重启浏览器。此入口来自 [Chrome 官方 WebMCP 文档](https://developer.chrome.com/docs/ai/webmcp/)。
-- 如果找不到此开关，或网页工具显示不支持，请记录浏览器完整版本反馈，不需要反复重装扩展。
-- 浏览器内部页不能运行网站脚本。网站的安全上下文、origin isolation 和 Permissions Policy 也可能限制原生接口。
+打开 `chrome://flags/#enable-webmcp-testing`，设为 Enabled，保存页面工作后重启浏览器。见 [Chrome 官方文档](https://developer.chrome.com/docs/ai/webmcp/)。找不到开关或显示不支持时，请记录浏览器完整版本反馈，不必反复重装扩展。网站的安全上下文、origin isolation 和 Permissions Policy 也可能限制原生接口。
 
-## 2. 构建与加载
+## 2. 下载与加载
 
-安装 Node.js 22+；没有 pnpm 时运行 `npm install -g pnpm@9.15.9`。从 [公测发布页](https://github.com/Yuyang-Hou/webmcp-script/releases/tag/v0.4.0-beta.1) 下载源码包，解压到固定目录，在该目录打开终端：
+从 [公测发布页](https://github.com/Yuyang-Hou/webmcp-script/releases/tag/v0.4.0-beta.2) 下载 **webmcp-script-0.4.0-beta.2.zip**，不是附带的 Source code 包。解压到固定目录，保留所有文件，无需 pnpm、npm install 或构建。
 
-```sh
-pnpm install --frozen-lockfile
-pnpm build
-```
+打开 `chrome://extensions`，开启开发者模式 → 加载已解压的扩展程序 → 选择解压目录里的 **extension**。进入扩展详情，开启“允许用户脚本”。Chrome 138+ 使用每个扩展单独的开关，见 [官方说明](https://developer.chrome.com/docs/extensions/reference/api/userScripts)。
 
-打开 `chrome://extensions`，开启开发者模式 → 加载已解压的扩展程序 → 选择项目里的 `dist/extension`。进入扩展详情，打开“允许用户脚本”。Chrome 138+ 使用每个扩展单独的开关，见 [官方说明](https://developer.chrome.com/docs/extensions/reference/api/userScripts)。加载已解压扩展仍需开发者模式。
+将绿色恐龙头固定到工具栏。打开普通网站后点击图标，可以查看“网页工具”和“本页脚本”。管理面板是扩展自己的页面，不需要另起服务。
 
-将绿色小鸟固定到工具栏。打开普通网站后，点击小鸟可以查看“网页工具”和“本页脚本”。管理面板是扩展自己的页面，不是需要另起服务的网站。
+包内还有 bridge（已打包 MCP）、setup.mjs（生成本机配置）、examples（脚本示例）和 demo.mjs（本地演示）。不要只保留 extension 后删除其余文件。
 
 ## 3. 连接 AI
 
-1. 点击小鸟 → 管理面板 → 连接 → 复制连接说明。
-2. 将说明发给支持 stdio MCP 的 AI 客户端。它会保留其他配置，添加或重新加载 `webmcp-script`。
-3. AI 调用 `connection_info` 后，将返回的完整 JSON 连接码粘贴到扩展并连接。此工具不需要先连好扩展。
-4. 请 AI 调用 `pages`。能列出页面，才算实际连接验证完成；扩展的连接状态仅代表它连到了本机服务。
+1. 扩展 → 管理面板 → 连接 → 复制连接说明。
+2. 发给支持本机 stdio MCP 的 AI 客户端。它会检查 Node.js 22+，找到解压目录，运行 `node setup.mjs`，保留其他服务并添加或重新加载 webmcp-script。该命令只输出配置，不修改客户端、不启动服务。
+3. AI 调用 connection_info 后，将完整 JSON 连接码粘贴到扩展。此工具不需要先连好扩展。
+4. 请 AI 调用 pages。能列出页面才算实际连接验证完成；扩展连接状态仅代表它连到了本机服务。
 
-如果客户端不能让 AI 修改设置，在其 MCP 设置中添加扩展“连接”页提供的 JSON；使用同一台电脑上的 stdio 客户端。纯网页或远程运行、不能启动本机进程的客户端不适用这份配置。请勿把 Node 路径或服务路径照抄自其他电脑。
+若 AI 无权配置客户端，运行 `node setup.mjs` 并将输出 JSON 添加到客户端 MCP 设置。不要照抄别人的路径。Node.js 未内置在包中；纯网页或远程客户端若不能启动本机进程，不适用此配置。
 
-## 4. 用本地示例完成首次验收
+## 4. 用本地示例验收
 
-在项目终端运行 `pnpm demo`，保持运行，浏览器打开 `http://127.0.0.1:17892`（不是 `/native`）。
+在解压目录运行 `node demo.mjs`，保持终端运行，浏览器打开 `http://127.0.0.1:17892`（不是 /native）。
 
-管理面板 → 新建脚本 → 粘贴 `examples/local-demo.user.js` 完整内容 → 保存 → 检查范围只有 localhost / 127.0.0.1 后确认。刷新示例页面。
+管理面板 → 新建脚本 → 粘贴 examples/local-demo.user.js 完整内容 → 保存 → 检查范围只有 localhost / 127.0.0.1 后确认。刷新示例页面。
 
-请 AI 发现该页面工具，先获取最新 revision/schema，再调用 `local-demo__sum`，输入 `a: 2, b: 3`。预期结果为 5。该示例不操作业务系统。
-
-`/native` 是网页自身加载脚本的对照页，其成功不能证明扩展安装成功。测试结束可停用示例脚本，终端按 Ctrl+C 关闭 demo。
+请 AI 发现页面工具，获取最新 revision/schema，再调用 local-demo__sum，输入 a: 2、b: 3，预期结果为 5。该示例不操作业务系统。/native 是网页自身加载脚本的对照页，不能证明扩展安装成功。结束时可停用脚本，Ctrl+C 关闭 demo。
 
 ## 常见问题
 
+连接页展开“连接检查”，按需检查用户脚本权限、本机服务和网页原生接口。它不执行网站工具，也不代替 AI 调用 pages。
+
 | 现象 | 处理 |
 |---|---|
-| 没有工具 | 区分“0 个工具”和“不支持”；确认网页确实内置工具，或脚本匹配当前 URL |
-| 无法保存 / userScripts 权限错误 | 在扩展详情开启允许用户脚本，并保持至少一个普通 HTTP(S) 页面已打开 |
-| 缺少本机安装信息 | 在保留的项目目录重新执行 `pnpm build`，重载扩展 |
-| 没有 connection_info | 重新连接已有 MCP 服务，避免重复添加同名服务 |
-| 端口占用或配对失败 | 关闭旧版本 MCP 连接后重试；不要公开配对码；新连接码包含端口 |
-| 更新后页面仍是旧工具 | 保存页面工作，再刷新页面；仅重载扩展不能替换页面已加载的运行时 |
-| 停用清理失败 | 按页面错误提示刷新；不要把尚未清理的页面当成停用成功 |
+| 没有工具 | 区分“0 个工具”和“不支持”；确认网页内置工具或脚本匹配 URL |
+| 无法保存 / userScripts 权限错误 | 开启允许用户脚本，并保持至少一个普通 HTTP(S) 页面已打开 |
+| 不知道如何配置 MCP | 复制连接说明交给 AI，或运行 node setup.mjs |
+| 没有 connection_info | 重新连接已有 MCP 服务，避免重复添加 |
+| 端口占用或配对失败 | 关闭旧版本 MCP 连接后重试；使用包含端口的新连接码 |
+| 更新后页面仍是旧工具 | 保存页面工作后刷新；仅重载扩展不能替换页面运行时 |
+| 停用清理失败 | 按页面提示刷新，不把尚未清理的页面当成停用成功 |
 
 ## 升级与退出公测
 
-升级前将需要保留的脚本源码另存为 `.user.js`。在原目录更新版本、重新安装依赖并构建，然后在扩展管理页重载同一路径；不要卸载再装来升级。重新连接客户端 MCP 服务，并在保存页面工作后刷新相关页面。
+升级前将重要脚本另存为 .user.js，关闭客户端的旧 MCP 服务。将新版解压到临时目录，核对版本后，用新版产品文件替换原安装目录的同名文件，**保留原 .local/ 和扩展加载路径**。重载原扩展、重新连接 MCP，保存页面工作后刷新网页。不要卸载再装来升级。
 
-没有内置完整导出或跨设备同步。卸载扩展会丢失扩展存储的脚本；源码、配对信息与本地脚本库分别保存在产品目录及其 `.local/` 下。退出公测时先保存需要的脚本，移除客户端 MCP 配置、卸载扩展，再自行删除不需要的项目目录。不要将 `.local/` 上传到反馈或仓库。
+从 beta.1 源码安装升级：先将预构建包内产品文件复制到原项目根目录，再将新 extension 内容复制到原 dist/extension；Chrome 继续加载原来的 dist/extension。保留 .local/，运行 node setup.mjs 核对路径。可将本段交给 AI 协助，操作前备份脚本。
 
-反馈请附产品版本、操作系统、浏览器完整版本、MCP 客户端以及脱敏复现步骤：[提交问题](https://github.com/Yuyang-Hou/webmcp-script/issues/new/choose)。
+更换目录后须重新运行 setup.mjs 并更新客户端路径；Chrome 可能将另一加载路径视为新扩展，脚本存储不会自动迁移。
+
+尚无完整导出或跨设备同步。卸载扩展会丢失其中的脚本；配对信息与可选 CLI 脚本库保存在产品目录 .local/。退出公测时先保存脚本，移除 MCP 配置、卸载扩展，再删除不需要的目录。不要上传 .local/。
+
+反馈请附产品版本、系统、浏览器完整版本、MCP 客户端和脱敏步骤：[提交问题](https://github.com/Yuyang-Hou/webmcp-script/issues/new/choose)。
