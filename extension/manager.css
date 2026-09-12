@@ -96,3 +96,5 @@ input[role=switch]:disabled{opacity:.5;cursor:wait}
 th:first-child,td:first-child{width:84px}
 @media(max-width:650px){th:first-child,td:first-child{width:70px}}
 @media(forced-colors:active){input[role=switch]{background:Canvas;border-color:ButtonText}input[role=switch]::before{background:ButtonText}input[role=switch]:checked{background:Highlight;border-color:Highlight}input[role=switch]:checked::before{background:HighlightText}}
+
+.connection-setup #connection-checks{padding-left:20px;color:var(--text-secondary);font-size:12px}.connection-setup #connection-checks li{margin:8px 0}.connection-setup>details{margin-top:16px}.connection-setup>details>p{margin-top:12px}

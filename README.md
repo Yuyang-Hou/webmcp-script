@@ -1,11 +1,11 @@
-<p align="center"><img src="extension/icons/icon-128.png" width="88" height="88" alt="WebMCP Script 小鸟标志"></p>
+<p align="center"><img src="extension/icons/icon-128.png" width="88" height="88" alt="WebMCP Script 恐龙头标志"></p>
 <h1 align="center">WebMCP Script</h1>
 <p align="center">让 AI 使用网页工具，让网站脚本可以自由分享。</p>
-<p align="center"><a href="https://github.com/Yuyang-Hou/webmcp-script/releases/tag/v0.4.0-beta.1">下载公测版</a> · <a href="docs/getting-started.md">安装与首次使用</a> · <a href="https://github.com/Yuyang-Hou/webmcp-script/issues/new/choose">反馈问题</a></p>
+<p align="center"><a href="https://github.com/Yuyang-Hou/webmcp-script/releases/tag/v0.4.0-beta.2">下载公测版</a> · <a href="docs/getting-started.md">安装与首次使用</a> · <a href="https://github.com/Yuyang-Hou/webmcp-script/issues/new/choose">反馈问题</a></p>
 
-**0.4.0-beta.1 · 开发者公测**。Chrome 扩展负责管理独立 `.user.js` 脚本，本机 MCP 服务把网页原生 WebMCP 工具提供给 AI。网站已有工具和脚本补充的工具走同一条原生发现与调用链路。
+**0.4.0-beta.2 · 开发者公测**。Chrome 扩展负责管理独立 `.user.js` 脚本，本机 MCP 服务把网页原生 WebMCP 工具提供给 AI。网站已有工具和脚本补充的工具走同一条原生发现与调用链路。
 
-目前通过下载源码、本机构建、加载已解压扩展安装，尚未上架 Chrome Web Store。适合愿意使用实验性浏览器能力的开发者，暂不承诺普通稳定版 Chrome 开箱即用。
+下载预构建 ZIP 即可加载扩展，连接 AI 需要 Node.js 22+，无需安装项目依赖或编译。尚未上架 Chrome Web Store；浏览器仍需提供实验性原生 WebMCP 接口。
 
 ## 可以做什么
 
@@ -21,24 +21,14 @@
 
 ## 开始公测
 
-需要 **Node.js 22+、pnpm 9.15.9，以及启用 WebMCP 的 Chromium**。本项目实测 Chromium 153；安装扩展所需的 userScripts API 与原生 WebMCP 是两个不同条件。
+需要 **启用 WebMCP 的 Chromium**，连接 AI 另需 **Node.js 22+**。本项目实测 Chromium 153；安装扩展所需的 userScripts API 与原生 WebMCP 是两个不同条件。
 
-1. 下载上方公测版的源码 ZIP，解压到固定目录；或者克隆指定版本：
-
-   ```sh
-   git clone --branch v0.4.0-beta.1 https://github.com/Yuyang-Hou/webmcp-script.git
-   cd webmcp-script
-   pnpm install --frozen-lockfile
-   pnpm build
-   ```
-
-   使用 ZIP 时，在解压后的项目目录执行最后两条命令。pnpm 未安装时先执行 `npm install -g pnpm@9.15.9`。
-
-2. 在浏览器开启 WebMCP 测试功能，再加载 `dist/extension` 并允许用户脚本。[逐步安装指南](docs/getting-started.md)包含具体入口和排错方法。
+1. 下载公测页的 **webmcp-script-0.4.0-beta.2.zip**，解压到固定目录，保留包内所有文件。不要选 Source code。
+2. 在浏览器开启 WebMCP 测试功能，再加载解压目录中的 **extension** 并允许用户脚本。[逐步安装指南](docs/getting-started.md)包含具体入口和排错方法。
 3. 扩展 → 管理面板 → **连接** → 复制连接说明发给 AI，再粘贴 AI 返回的连接码。
 4. 请 AI 调用 `pages` 检查页面。首次验证可使用本地示例，避免用业务写操作试连通性。
 
-构建会写入这台电脑的 Node 和 MCP 入口绝对路径；请保留安装目录，移动目录后重新构建。连接码仅用于本机配对，不能分享。更新时见[升级与退出公测](docs/getting-started.md#升级与退出公测)。
+AI 可运行包内 `node setup.mjs` 获取这台电脑的 MCP 配置。该命令只输出配置，不修改客户端或启动服务；移动目录后重新生成并更新配置。连接页提供只读检查。连接码仅用于本机配对，不能分享。更新时见[升级与退出公测](docs/getting-started.md#升级与退出公测)。源码开发另见[开发文档](docs/development.md)。
 
 ## 公测边界
 

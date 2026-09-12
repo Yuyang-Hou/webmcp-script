@@ -1,3 +1,4 @@
+import {realpathSync} from 'node:fs';
 import {mkdir,readFile,writeFile,rm,cp} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -47,7 +48,7 @@ ${script.source}
   return manifest;
 }
 
-if(process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
+if(process.argv[1] && realpathSync(process.argv[1])===fileURLToPath(import.meta.url)) {
   const [output,...paths]=process.argv.slice(2);
   if(!output||!paths.length)throw Error('用法：node scripts/bundle-native.mjs <新输出目录> <脚本.user.js> [...]');
   await bundleNative(paths,resolve(output));

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {discovery,matchesURL,toolSource} from '../extension/ui.js';
-import {parsePairing,connectionInstructions} from '../extension/connection.js';
+import {parsePairing,connectionInstructions,connectionChecks} from '../extension/connection.js';
 const token='a'.repeat(64);
 assert.equal(toolSource({source:{kind:'script',id:'plain',name:'阅读助手'}}),'脚本 · 阅读助手');
 assert.equal(toolSource({source:{kind:'page'}}),'页面提供');
@@ -10,6 +10,11 @@ assert.deepEqual(parsePairing(token,'17891'),{token,port:17891});
 for(const value of ['', 'too-short', '{broken', JSON.stringify({version:2,token,port:17891}), JSON.stringify({version:1,token,port:99999}),JSON.stringify({version:1,token:token+'\n',port:17891})])assert.throws(()=>parsePairing(value));
 assert.match(connectionInstructions({mcpServers:{}}),/connection_info/);
 assert(!connectionInstructions({mcpServers:{}}).includes('pairing-token'));
+assert.match(connectionInstructions(null),/node setup.mjs/);
+assert(!connectionInstructions(null).includes('undefined'));
+assert.match(connectionChecks({bridgeStatus:'未配对',userScriptsAvailable:false},[]).join(' '),/允许用户脚本.*尚未配对.*HTTP\(S\)/);
+const checks=connectionChecks({bridgeStatus:'已连接',userScriptsAvailable:true},[{native:true,implementation:'native-0.4',tools:[{name:'read'}]},{native:false}]).join(' ');
+assert.match(checks,/仍需让 AI 调用 pages/);assert.match(checks,/1 \/ 2.*1 个工具/);
 assert.equal(discovery({implementation:'native-0.4',native:true,tools:[]}).text,'0 个工具');
 for(const page of [undefined,{error:'denied'},{native:false,implementation:'native-0.4'}, {native:true,tools:[]}])assert.equal(discovery(page).ready,false);
 for(const [pattern,url,expected] of [

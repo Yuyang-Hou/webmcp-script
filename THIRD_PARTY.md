@@ -16,3 +16,5 @@
 AnyWeb MCP 仅用于架构调研；本项目未复制其站点业务代码或启动器。未将外部调研资料或本机验收信息作为产品运行依赖。
 
 扩展包包含 `THIRD_PARTY_LICENSES.txt`，按实际打包输入收集 CodeMirror 及其间接依赖的完整许可证。
+
+预构建 ZIP 根目录另附 `THIRD_PARTY_LICENSES.txt`，收集 MCP 服务和 CLI 实际打包依赖的许可证；生成的 JS 旁保留 esbuild 的许可注释文件。Node.js 不随包分发，需要用户自行安装。

@@ -281,11 +281,20 @@ The manager SHALL accept userscripts without a proprietary @id by deriving a sta
 
 
 ### Requirement: Developer public beta distribution
-The project SHALL publish a source-based developer beta with truthful compatibility and data-flow documentation.
+The project SHALL publish a prebuilt developer beta with truthful compatibility and data-flow documentation.
 
 #### Scenario: Public beta installation
-- **WHEN** a tester downloads the versioned source archive
-- **THEN** it includes the bird brand assets, installation steps, privacy notice, license and feedback links, but no local pairing data, browser profiles or machine-specific build configuration
-- **AND** the tester installs pinned dependencies and builds locally before loading the unpacked extension; native WebMCP availability is a separate requirement from userScripts permission
-- **AND** the extension icon and manager branding use the same bird, while connection badges retain their existing meaning
+- **WHEN** a tester downloads the versioned prebuilt archive
+- **THEN** it includes the simplified dinosaur-head brand assets, installation steps, privacy notice, license and feedback links, but no local pairing data, browser profiles or machine-specific build configuration
+- **AND** the tester can load the unpacked extension without installing dependencies or building; the bundled MCP requires Node.js 22+; native WebMCP availability is a separate requirement from userScripts permission
+- **AND** the extension icon and manager branding use the same simplified dinosaur head, while connection badges retain their existing meaning
 - **AND** Codex isolation experiments and mocked UI tests are not advertised as general installation acceptance
+
+
+#### Scenario: Portable connection setup and diagnosis
+- **WHEN** a prebuilt extension has no machine-specific configuration
+- **THEN** copying setup instructions remains available and explains how the AI obtains configuration from the local setup.mjs without installing project dependencies or overwriting other MCP services
+- **AND** setup.mjs only prints validated local paths and does not start a relay or write client settings; after relocation it reports the new directory
+- **WHEN** the user requests connection checks
+- **THEN** the UI reports userScripts permission, local relay state and native page discovery separately, with recovery guidance, without invoking website tools or claiming that AI-side verification passed
+- **AND** release acceptance unpacks the actual ZIP outside the source tree and validates its hashes, MCP pairing and CLI without node_modules; a mock extension response is labeled as a transport check
