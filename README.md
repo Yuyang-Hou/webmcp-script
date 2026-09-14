@@ -45,6 +45,12 @@ AI 可运行包内 `node setup.mjs` 获取这台电脑的 MCP 配置。该命令
 
 ## 文档与维护
 
+### 配套 skill：WebMCP Script
+
+[WebMCP Script skill](skills/webmcp-script/SKILL.md)（原 web-code）随源码及后续预构建包维护，指导 AI 编写、验证、安装和修复网站用户脚本。调用名为 `$webmcp-script`；它不替代扩展或 MCP 服务，也不自动授权网站操作。已发布的旧版 ZIP 不包含此新增文件。
+
+安装到 Codex：将包内 `skills/webmcp-script` 整个目录复制到 `${CODEX_HOME:-$HOME/.codex}/skills/`，重新加载 skill 目录或新开任务。已有同名目录先核对，避免覆盖个人修改。从旧 `web-code` 迁移时，先将旧目录移到 skills 目录之外备份，再安装新名称，避免重复发现。其他客户端使用其支持的 skill 目录。
+
 [脚本格式与模板](SCRIPT_FORMAT.md) · [隐私与数据流](PRIVACY.md) · [安全报告](SECURITY.md) · [参与贡献](CONTRIBUTING.md) · [更新记录](CHANGELOG.md) · [路线图](ROADMAP.md) · [开发与实验方案](docs/development.md) · [AI 脚本管理](docs/ai-script-management.md)
 
 源码采用 MIT 许可证；依赖许可见 [THIRD_PARTY.md](THIRD_PARTY.md)。本项目为独立社区项目，与 Google、OpenAI 没有官方隶属关系。

@@ -17,6 +17,9 @@ try{
   assert.equal(createHash('sha256').update(await readFile(join(root,'dist',`webmcp-script-${version}.zip`))).digest('hex'),checksum);
   execFileSync('unzip',['-q',join(root,'dist',`webmcp-script-${version}.zip`),'-d',temp]);
   const files=await readdir(folder,{recursive:true});
+  for(const file of ['SKILL.md','agents/openai.yaml','references/browser-execution.md','references/connection-and-installation.md']){
+    assert.equal(await readFile(join(folder,'skills/webmcp-script',file),'utf8'),await readFile(join(root,'skills/webmcp-script',file),'utf8'));
+  }
   assert(!files.some(f=>f.split('/').some(p=>['node_modules','.local','.git'].includes(p))));
   const manifest=JSON.parse(await readFile(join(folder,'build.json'),'utf8'));
   for(const [file,hash] of Object.entries(manifest.files)){

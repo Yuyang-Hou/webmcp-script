@@ -13,6 +13,7 @@ for(const folder of ['extension','examples'])await cp(join(root,'dist',folder),j
 await writeFile(join(out,'extension/connection-config.json'),'null\n');
 for(const file of ['setup.mjs','README.md','PRIVACY.md','SECURITY.md','LICENSE','THIRD_PARTY.md','SCRIPT_FORMAT.md','CHANGELOG.md','ROADMAP.md','CONTRIBUTING.md'])await cp(join(root,file),join(out,file));
 await cp(join(root,'docs'),join(out,'docs'),{recursive:true});
+await cp(join(root,'skills'),join(out,'skills'),{recursive:true});
 await cp(join(root,'scripts/demo.mjs'),join(out,'demo.mjs'));
 // The demo source normally reads from dist/examples; the release keeps examples beside it.
 const demo=await readFile(join(out,'demo.mjs'),'utf8');

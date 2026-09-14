@@ -5,6 +5,16 @@
 
 ## Requirements
 
+### Requirement: Maintained WebMCP Script skill
+The repository SHALL maintain the companion skill as skills/webmcp-script with the display name WebMCP Script and invocation name webmcp-script, replacing the former web-code name.
+
+#### Scenario: Install the companion skill from a portable release
+- **WHEN** a new portable archive is built
+- **THEN** it includes the complete skill directory, UI metadata and all referenced guidance without requiring repository-relative resources
+- **AND** documentation explains installation and preservation of old web-code customizations without duplicate discovery
+- **AND** the skill distinguishes script authoring, Chrome extension installation, local-library import, discovery and authorized business invocation
+- **AND** skill installation does not itself configure MCP, pair Chrome or authorize website writes
+
 ### Requirement: Shared AI-managed local script library
 CLI and MCP SHALL share the same local script library for preview, import, version restore, enable, disable, archival removal, immutable build, build selection and isolated launch requests.
 
