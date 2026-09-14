@@ -45,6 +45,16 @@ AI 可运行包内 `node setup.mjs` 获取这台电脑的 MCP 配置。该命令
 
 ## 文档与维护
 
+### AI 自动发现（源码新增，旧版 ZIP 尚不包含）
+
+AI 可用 `browser_catalog` 搜索当前 Chrome 扩展已安装的脚本及保存的项目入口，无需先打开页面，也无需每次安装后修改记忆或项目提示文件。目录直接读取扩展存储，返回名称、说明、版本、范围和启停状态；它与 CLI 本地脚本库不同，也不代表页面原生工具已就绪。
+
+首次确认项目页面后，用 `browser_entry` 保存名称（区分项目和环境）、pageId 与观察到的精确 URL；新建的 expectedUrl 为 null，更新和删除使用目录返回的旧 URL。页面跳转或并发修改会拒绝保存。后续查询目录，再用 `pages` 或 `visit_page` 打开入口、发现工具即可。入口仅存在当前 Chrome 扩展本地，可用 remove 删除；不保存凭据或含令牌的网址。
+
+源码验收：`pnpm build && pnpm test:catalog-browser`，使用隔离 Chromium、真实扩展安装和 stdio MCP 验证关闭页面后的目录发现与入口复用，不访问业务网站。
+
+这两个工具需要扩展和 MCP 同时更新并重新连接。安装清单不做网站代码变更检测，不保证已安装脚本仍兼容网站；实际能力仍以当前页面原生发现和只读验证为准。
+
 ### 配套 skill：WebMCP Script
 
 [WebMCP Script skill](skills/webmcp-script/SKILL.md)（原 web-code）随源码及后续预构建包维护，指导 AI 编写、验证、安装和修复网站用户脚本。调用名为 `$webmcp-script`；它不替代扩展或 MCP 服务，也不自动授权网站操作。已发布的旧版 ZIP 不包含此新增文件。

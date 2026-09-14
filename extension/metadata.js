@@ -23,7 +23,7 @@ export function parseScript(source) {
   const id = explicitId || `userscript-${hash.toString(16).padStart(16, '0')}`;
   const header = block[0].replace(/^(\s*\/\/\s*@match[ \t]+)([^\r\n]+)$/gm, (_, prefix, value) => prefix + unwrap(value.trim()));
   source = source.slice(0, block.index) + header + source.slice(block.index + block[0].length);
-  return {id,name,namespace,version,matches,source,enabled:true};
+  return {id,name,namespace,version,matches,description:get('description')[0]||'',source,enabled:true};
 }
 
 export function prepareImport(source, scripts, replace, expectedSource, expectedEnabled) {

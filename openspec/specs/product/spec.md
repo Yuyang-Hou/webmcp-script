@@ -5,6 +5,27 @@
 
 ## Requirements
 
+### Requirement: Browser installation and entry discovery
+The MCP SHALL expose a searchable catalog sourced directly from the connected Chrome extension's installed scripts and persisted named entry URLs, without requiring open website pages or per-install memory edits. This catalog SHALL NOT replace native tool discovery or the separate CLI library.
+
+#### Scenario: Installed script with no open page
+- **WHEN** AI searches the browser catalog after installation or update
+- **THEN** it receives the current script name, description, version, matches and enabled state, including disabled scripts
+- **AND** no script source, previous source or pairing secret is returned
+- **AND** metadata does not claim native tools are ready or grant authorization
+
+#### Scenario: Reusable confirmed project entry
+- **WHEN** AI saves a confirmed project/environment name with an observed page ID and exact URL
+- **THEN** the extension persists it locally and later catalog queries return it even after the page closes
+- **AND** navigation since observation, stale expected URLs, invalid names, non-HTTP(S) URLs and embedded login credentials reject the save
+- **AND** entry writes are serialized, storage failure preserves the prior entry, and removal uses the same stale-write check
+- **AND** the operation does not install scripts, open pages or invoke website tools
+
+#### Scenario: Compatibility boundary
+- **WHEN** an old extension or MCP lacks catalog support
+- **THEN** guidance requires updating both components instead of treating the failure as an empty installation list
+- **AND** automatic website-code drift detection is not claimed by the installation catalog
+
 ### Requirement: Maintained WebMCP Script skill
 The repository SHALL maintain the companion skill as skills/webmcp-script with the display name WebMCP Script and invocation name webmcp-script, replacing the former web-code name.
 
