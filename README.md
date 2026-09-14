@@ -1,79 +1,56 @@
-# WebMCP Script 0.3.0
+<p align="center"><img src="extension/icons/icon-128.png" width="88" height="88" alt="WebMCP Script 恐龙头标志"></p>
+<h1 align="center">WebMCP Script</h1>
+<p align="center">让 AI 使用网页工具，让网站脚本可以自由分享。</p>
+<p align="center"><a href="https://github.com/Yuyang-Hou/webmcp-script/releases/tag/v0.4.0-beta.2">下载公测版</a> · <a href="docs/getting-started.md">安装与首次使用</a> · <a href="https://github.com/Yuyang-Hou/webmcp-script/issues/new/choose">反馈问题</a></p>
 
-独立网站脚本管理器与标准 MCP 本地入口。将网站能力封装成 `.user.js`，导入后供 AI 发现和调用；新增网站无需重建扩展。无云服务或账号。
+**0.4.0-beta.2 · 开发者公测**。Chrome 扩展负责管理独立 `.user.js` 脚本，本机 MCP 服务把网页原生 WebMCP 工具提供给 AI。网站已有工具和脚本补充的工具走同一条原生发现与调用链路。
 
-![脚本库](docs/manager.png)
+下载预构建 ZIP 即可加载扩展，连接 AI 需要 Node.js 22+，无需安装项目依赖或编译。尚未上架 Chrome Web Store；浏览器仍需提供实验性原生 WebMCP 接口。
 
-## 安装
+## 可以做什么
 
-需要 Node.js 22+、pnpm、支持用户脚本 API 的 Chrome 135+。
+- 查看当前网页的工具，已识别的来源按页面或脚本展示。
+- 粘贴标准用户脚本，使用 CodeMirror 编辑；保存前预览网站范围，支持启停、删除和上一版恢复。
+- 脚本直接使用 `document.modelContext.registerTool`，不必依赖项目专属接口。
+- 连接支持 stdio MCP 的 AI 客户端，发现页面、读取工具 schema、执行经过用户授权的操作。
+- 在扩展图标查看本页工具数量和连接异常；多个 AI 任务共享本机连接。
 
-```sh
-pnpm install --frozen-lockfile
-pnpm build
-pnpm demo
-```
+![管理面板](docs/manager.png)
 
-1. 在 `chrome://extensions` 开启开发者模式，加载已解压的 `dist/extension`。
-2. 在扩展详情中开启“允许用户脚本”；旧版 Chrome 通过开发者模式授权。
-3. 打开 `http://127.0.0.1:17892`，再进入扩展管理页。
-4. 导入 `dist/examples/local-demo.user.js`，查看名称、版本、匹配范围及源码，确认安装。
+界面截图使用 example.com 测试数据，不代表该网站实际提供这些工具。
 
-导入的语法预检需要至少一个已打开的普通 HTTP(S) 页面。浏览器内部页不支持。
+## 开始公测
 
-## 连接 AI
+需要 **启用 WebMCP 的 Chromium**，连接 AI 另需 **Node.js 22+**。本项目实测 Chromium 153；安装扩展所需的 userScripts API 与原生 WebMCP 是两个不同条件。
 
-支持 MCP stdio 的客户端可以直接启动入口，无需额外 Skill。将示例中的路径替换为本机绝对路径：
+1. 下载公测页的 **webmcp-script-0.4.0-beta.2.zip**，解压到固定目录，保留包内所有文件。不要选 Source code。
+2. 在浏览器开启 WebMCP 测试功能，再加载解压目录中的 **extension** 并允许用户脚本。[逐步安装指南](docs/getting-started.md)包含具体入口和排错方法。
+3. 扩展 → 管理面板 → **连接** → 复制连接说明发给 AI，再粘贴 AI 返回的连接码。
+4. 请 AI 调用 `pages` 检查页面。首次验证可使用本地示例，避免用业务写操作试连通性。
 
-```json
-{"mcpServers":{"webmcp-script":{"command":"/absolute/path/to/node","args":["/absolute/path/to/webmcp-script/bridge/server.mjs"]}}}
-```
+AI 可运行包内 `node setup.mjs` 获取这台电脑的 MCP 配置。该命令只输出配置，不修改客户端或启动服务；移动目录后重新生成并更新配置。连接页提供只读检查。连接码仅用于本机配对，不能分享。更新时见[升级与退出公测](docs/getting-started.md#升级与退出公测)。源码开发另见[开发文档](docs/development.md)。
 
-首次连接自动生成 `.local/pairing-token`。将文件内容粘贴到扩展配对字段。配对码仅用于本机连接，不要分享。
+## 公测边界
 
-多个 AI 任务自动共用同一个本地 relay，各自请求和结果独立；关闭一个任务不会中断其他任务。一个 relay 连接一个扩展实例。最后一个客户端离开 60 秒后服务自动退出，下次连接自动启动。无需另外启动守护服务。
+| 范围 | 状态 |
+|---|---|
+| Chrome 扩展、脚本编辑与 MCP 桥接 | 本次公测主入口 |
+| 原生发现、调用与脚本停用清理 | 已有自动化与隔离浏览器验证；归属范围见脚本格式说明 |
+| Windows / Linux 用户桌面 | 尚未完整人工验收；Linux CI 不等于用户桌面验收 |
+| Codex 内置浏览器 | 实验路线，依赖特定 macOS 隔离副本与启动方式，不属于开箱即用支持 |
+| 热更新 | 普通脚本更新或重新启用后需刷新页面；声明式包需重新生成并重载 |
+| 脚本兼容性 | 支持所列元数据，不是完整油猴实现，不支持全部 GM API |
 
-默认仅监听 `127.0.0.1:17891`。如需更换端口，在 MCP 环境变量设置 `WEBMCP_PORT`，并修改扩展“高级连接设置”中的端口。相同端口的客户端必须使用相同配对码。浏览器页面来源不能直接连接 MCP 客户端通道。
+浏览器未提供原生接口时会报“不支持”，不会以自建工具表冒充原生 WebMCP。只管理当前文档工具，不汇总跨源 iframe。调用超时或断线可能意味着结果未知，不自动重放；脚本可读取和修改匹配页面，工具可调用不等于业务操作已获授权。
 
-AI 调用顺序：`pages` / `visit_page` → `inspect_page` → `describe_tool` → `call_tool`。查看、访问和调用返回工具摘要，完整 schema 按需获取。调用绑定当前文档与 revision，过期调用会被拒绝。
+## 文档与维护
 
-## 管理与恢复
+### 配套 skill：WebMCP Script
 
-- 导入、替换和恢复均先预览，确认前不安装。替换要求 ID 一致，并保留原来的启用状态。
-- 保留一个上一版本，可以预览后恢复；不提供完整历史或远程自动更新。
-- 预览后脚本被其他窗口修改时，拒绝覆盖并要求重新预览。
-- 语法检查或存储失败会报错并尝试保留旧注册；恢复失败会明确显示。
-- 停用、卸载或离开匹配路径会清理工具。升级扩展后刷新已有页面。
-- 连接断开后自动重连。调用超时或中途断线可能意味着结果未知，不自动重放；先核对页面实际结果。
+[WebMCP Script skill](skills/webmcp-script/SKILL.md)（原 web-code）随源码及后续预构建包维护，指导 AI 编写、验证、安装和修复网站用户脚本。调用名为 `$webmcp-script`；它不替代扩展或 MCP 服务，也不自动授权网站操作。已发布的旧版 ZIP 不包含此新增文件。
 
-## 脚本与权限
+安装到 Codex：将包内 `skills/webmcp-script` 整个目录复制到 `${CODEX_HOME:-$HOME/.codex}/skills/`，重新加载 skill 目录或新开任务。已有同名目录先核对，避免覆盖个人修改。从旧 `web-code` 迁移时，先将旧目录移到 skills 目录之外备份，再安装新名称，避免重复发现。其他客户端使用其支持的 skill 目录。
 
-最小格式见 [SCRIPT_FORMAT.md](SCRIPT_FORMAT.md)，不是完整油猴实现。仅安装可信代码：脚本在页面 MAIN world 执行，可读取和修改匹配页面，不是安全沙箱。工具描述不代表业务写操作已获授权。
+[脚本格式与模板](SCRIPT_FORMAT.md) · [隐私与数据流](PRIVACY.md) · [安全报告](SECURITY.md) · [参与贡献](CONTRIBUTING.md) · [更新记录](CHANGELOG.md) · [路线图](ROADMAP.md) · [开发与实验方案](docs/development.md) · [AI 脚本管理](docs/ai-script-management.md)
 
-通过 Chrome 官方 `userScripts` 加载，无 `eval` / `new Function`。全 HTTP(S) host 权限用于跨站管理和发现，业务脚本执行仍受 `@match` 限制。不汇总跨源 iframe，不承诺枚举其他来源的原生工具。第三方依赖说明见 [THIRD_PARTY.md](THIRD_PARTY.md)。
-
-## Codex 内置浏览器
-
-启动 demo 后，打开 `http://127.0.0.1:17892/native`。页面直接加载与 Chrome 导入相同的独立脚本；已实测原生发现、调用、刷新和 SPA 清理，无需本地 MCP bridge。
-
-该结果验证页面加载脚本的原生路线；任意第三方网站的跨会话持久安装入口仍未完成，未修改或重启当前 Codex 宿主。
-
-## 开发验收
-
-```sh
-pnpm test
-pnpm exec playwright install chromium
-TEST_EXTENSION=dist/extension pnpm test:browser
-```
-
-真实浏览器测试使用隔离 profile 和端口 17941/17992。`pnpm build` 输出加载目录与 SHA-256 清单。配置了 OpenSpec CLI 的环境另运行 `pnpm check:spec`。
-
-macOS 可在安装依赖和 Chromium 后双击 `启动验收.command`，打开独立预览浏览器；保持终端运行，Ctrl+C 退出。避免同时重复启动同一个预览 profile。
-
-当前为开源预览版，未通过 Chrome Web Store 审核。
-
-## 维护
-
-[路线图](ROADMAP.md) · [参与贡献](CONTRIBUTING.md) · [更新记录](CHANGELOG.md) · [界面设计依据](docs/ui-design.md) · [安全报告](SECURITY.md)
-
-源码采用 MIT 许可证。CI 验证自动测试、构建与隔离浏览器流程；依赖更新由 Dependabot 每周提出 PR。
+源码采用 MIT 许可证；依赖许可见 [THIRD_PARTY.md](THIRD_PARTY.md)。本项目为独立社区项目，与 Google、OpenAI 没有官方隶属关系。
