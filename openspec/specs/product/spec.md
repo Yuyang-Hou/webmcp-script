@@ -290,6 +290,21 @@ The manager SHALL accept userscripts without a proprietary @id by deriving a sta
 - **AND** clipboard denial exposes selectable instructions, while the connected state asks the AI to verify page discovery rather than claiming AI invocation has already passed
 
 
+### Requirement: Restricted pages and independent browser pairing
+Maintenance injection failures SHALL be scoped to their page and cleared on navigation, close or successful maintenance retry. Failures from obsolete frames SHALL NOT become persistent global errors or trigger automatic business-tool retries. Real current-page script failures SHALL remain visible on that page and in the manager page list.
+
+#### Scenario: Navigation races with extension maintenance
+- **WHEN** a frame is removed during maintenance injection, or a pending injection fails after its tab navigates or closes
+- **THEN** the obsolete failure is discarded and no unrelated popup or connection page displays it
+- **AND** a genuine failure on another current page remains visible only in that page's discovery result
+
+Restricted Chrome Web Store pages SHALL be excluded from injection, cleanup and syntax-check targets. Discovery SHALL explain the restriction per page without blocking pairing or other pages. Each relay port accepts one browser; connecting a separate browser SHALL use a separate configured WEBMCP_PORT without evicting the existing peer.
+
+#### Scenario: Web Store open during pairing and script management
+- **WHEN** a Chrome Web Store page is open alongside an ordinary website
+- **THEN** no scripting API is called on the restricted page, syntax validation uses the ordinary website, and discovery explains the restriction for that page
+- **AND** a second browser can pair on a separate relay port without taking over the first browser
+
 ### Requirement: Developer public beta distribution
 The project SHALL publish a prebuilt developer beta with truthful compatibility and data-flow documentation.
 

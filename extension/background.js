@@ -5,6 +5,22 @@ const runtimeCode = fetch(chrome.runtime.getURL('runtime.js')).then(r => r.text(
 const settings = async () => ({scripts:[], token:'', port:17891, ...await chrome.storage.local.get(['scripts','token','port'])});
 const notify = () => { if (socket?.readyState === 1) socket.send(JSON.stringify({type:'changed'})); };
 const badgeRequests = new Map();
+const pageStates = new Map();
+async function updatePage(tabId,action) {
+  const state={error:''};pageStates.set(tabId,state);
+  try {await action();}catch(error) {
+    // Only maintenance injection can become obsolete during navigation. Never retry tool calls.
+    if(pageStates.get(tabId)!==state||/Frame with ID \d+ was removed|No tab with id|No frame with id/i.test(error.message))return;
+    state.error=error.message;
+  }
+}
+function canScriptURL(value) {
+  try {
+    const url=new URL(value);
+    return ['http:','https:'].includes(url.protocol)&&url.hostname!=='chromewebstore.google.com'&&
+      !(url.hostname==='chrome.google.com'&&/^\/webstore(?:\/|$)/.test(url.pathname));
+  }catch{return false;}
+}
 async function refreshBadge(tabId, loading=false) {
   const request=Symbol();badgeRequests.set(tabId,request);
   const paint=async(text,color,title)=>{
@@ -19,7 +35,7 @@ async function refreshBadge(tabId, loading=false) {
   try {
     if(bridgeStatus!=='已连接')return await paint(bridgeStatus==='连接中…'?'':'!',bridgeStatus==='未配对'?'#986b24':'#b4483c',bridgeStatus);
     const tab=await chrome.tabs.get(tabId);
-    if(!/^https?:/.test(tab.url||''))return await paint('','#737780','此页面不支持读取 WebMCP');
+    if(!canScriptURL(tab.url))return await paint('','#737780','此页面不支持读取 WebMCP');
     await paint('','#737780','本地桥接已连接 · 正在检测页面工具');
     if(loading||tab.status==='loading')return;
     const snapshot=await page(tabId,'inspect');
@@ -47,7 +63,7 @@ async function execute(injection) {
   return results;
 }
 async function checkSyntax(script) {
-  const tab=(await chrome.tabs.query({})).find(tab=>/^https?:/.test(tab.url||''));
+  const tab=(await chrome.tabs.query({})).find(tab=>canScriptURL(tab.url));
   if(!tab) throw Error('请先打开一个普通 HTTP(S) 网页，再保存脚本；原有脚本已保留');
   const results=await execute({target:{tabId:tab.id},world:'MAIN',js:[{code:`(() => {\n${script.source}\n}); true;`}]});
   if(!results.some(result=>result.result===true)) throw Error('脚本语法检查失败，原有脚本已保留');
@@ -87,10 +103,11 @@ async function page(pageId, method, params={}) {
   if (!Number.isInteger(Number(pageId))) throw Error('无效 pageId');
   const data = await chrome.tabs.sendMessage(Number(pageId), {type:'page',method,params}, {frameId:0});
   if (data.error) throw Error(data.error.message);
-  return {...data.result, pageId:Number(pageId)};
+  const error=method==='inspect'?pageStates.get(Number(pageId))?.error:undefined;
+  return {...data.result, pageId:Number(pageId),...(error?{errors:[...new Set([...(data.result.errors||[]),error])]}:{})};
 }
 async function inject(tab, scripts) {
-  if (!/^https?:/.test(tab.url || '')) return;
+  if (!canScriptURL(tab.url)) return;
   await chrome.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});
   await execute({target:{tabId:tab.id},world:'MAIN',js:[{code:await runtimeCode}]});
   for (const script of scripts) {
@@ -111,8 +128,7 @@ async function apply(scripts, removed=[]) {
     throw error;
   }
   const tabs = await chrome.tabs.query({});
-  await Promise.all(tabs.filter(t=>/^https?:/.test(t.url||'')).map(async tab=> {
-    try {
+  await Promise.all(tabs.filter(t=>canScriptURL(t.url)).map(tab=>updatePage(tab.id,async()=>{
       for (const id of removed) {
         await execute({target:{tabId:tab.id},world:'MAIN',js:[{code:`(async () => {
           const run = globalThis[Symbol.for('webmcp-script.executions')]?.get(${JSON.stringify(id)});
@@ -123,15 +139,17 @@ async function apply(scripts, removed=[]) {
         })();`}]});
       }
       await inject(tab,scripts);
-    } catch(e) { lastError = `${tab.url}: ${e.message}`; }
-  }));
+  })));
   notify();
   void refreshBadges();
 }
 async function dispatch(method,params={}) {
   if (method === 'pages') {
     const tabs = (await chrome.tabs.query({})).filter(t=>/^https?:/.test(t.url||''));
-    return {pages:await Promise.all(tabs.map(async t=> {try {return {id:t.id,...await page(t.id,'inspect')};} catch(e) {return {id:t.id,url:t.url,title:t.title,tools:[],error:e.message};}}))};
+    return {pages:await Promise.all(tabs.map(async t=> {try {
+      if(!canScriptURL(t.url))return {id:t.id,url:t.url,title:t.title,tools:[],error:'Chrome 扩展商店不允许扩展读取或注入脚本；不影响其他网页和本机连接。'};
+      return {id:t.id,...await page(t.id,'inspect')};
+    } catch(e) {return {id:t.id,url:t.url,title:t.title,tools:[],error:e.message};}}))};
   }
   if (method === 'visit') {
     const u = new URL(params.url);
@@ -165,23 +183,23 @@ async function connect() {
 }
 chrome.alarms.create('reconnect',{periodInMinutes:0.5});
 chrome.alarms.onAlarm.addListener(connect);
-chrome.tabs.onRemoved.addListener(id=>{badgeRequests.delete(id);notify();});
+chrome.tabs.onRemoved.addListener(id=>{badgeRequests.delete(id);pageStates.delete(id);notify();});
 chrome.tabs.onActivated.addListener(({tabId})=>{void refreshBadge(tabId);});
-chrome.tabs.onUpdated.addListener((id,change)=>{if(change.url || change.status) {notify();void refreshBadge(id,change.status==='loading');}});
+chrome.tabs.onUpdated.addListener((id,change)=>{if(change.url || change.status==='loading')pageStates.delete(id);if(change.url || change.status) {notify();void refreshBadge(id,change.status==='loading');}});
 chrome.webNavigation.onHistoryStateUpdated.addListener(async details=>{
   if(details.frameId!==0) return;
   mutation=mutation.catch(()=>{}).then(async()=>{
-    try { await inject(await chrome.tabs.get(details.tabId),(await settings()).scripts); } catch(e) {lastError=e.message;}
+    await updatePage(details.tabId,async()=>inject(await chrome.tabs.get(details.tabId),(await settings()).scripts));
     notify();
     void refreshBadge(details.tabId);
   });
   await mutation;
 });
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
-  if(message.type==='changed') {if(sender.tab && sender.frameId===0){if(message.errors?.length)lastError=String(message.errors.at(-1));void refreshBadge(sender.tab.id);}notify();return;}
+  if(message.type==='changed') {if(sender.tab && sender.frameId===0)void refreshBadge(sender.tab.id);notify();return;}
   if(!sender.url?.startsWith(chrome.runtime.getURL(''))) return;
   const action=async()=>{
-    if(message.type==='status') {let available=true;try {await api().getScripts();} catch(e) {available=false;lastError=e.message;} return {...await settings(),bridgeStatus,lastError,userScriptsAvailable:available};}
+    if(message.type==='status') {let available=true,permissionError='';try {await api().getScripts();} catch(e) {available=false;permissionError=e.message;} return {...await settings(),bridgeStatus,lastError:permissionError||lastError,userScriptsAvailable:available};}
     if(message.type==='pages') return dispatch('pages');
     if(message.type==='inspect') return dispatch('inspect',{pageId:message.pageId});
     if(message.type==='pair') {const {token,port}=parsePairing(message.token,message.port??17891);await chrome.storage.local.set({token,port});socket?.close();socket=undefined;connecting=false;await connect();return {ok:true};}
@@ -199,13 +217,14 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
     try { await chrome.storage.local.set({scripts}); } catch(error) {
       try { await apply(state.scripts,scripts.map(script=>script.id)); }
       catch(rollbackError) { throw Error(`保存失败：${error.message}；自动恢复未完成：${rollbackError.message}。请重试加载以恢复已保存版本。`); }
-      if(lastError) throw Error(`保存失败：${error.message}；已恢复脚本注册，但部分页面未恢复：${lastError}`);
+      const recoveryErrors=[...pageStates.values()].map(state=>state.error).filter(Boolean);
+      if(recoveryErrors.length) throw Error(`保存失败：${error.message}；已恢复脚本注册，但部分页面未恢复：${recoveryErrors.join('；')}`);
       throw Error(`保存失败：${error.message}；已恢复原有脚本与页面状态。`);
     }
     return {ok:true};
   };
   mutation=mutation.catch(()=>{}).then(action);
-  mutation.then(result=>reply({result}),error=>{lastError=error.message;reply({error:{message:error.message}});});
+  mutation.then(result=>reply({result}),error=>{if(!['inspect','pages','status'].includes(message.type))lastError=error.message;reply({error:{message:error.message}});});
   return true;
 });
 chrome.runtime.onInstalled.addListener(()=>{mutation=mutation.catch(()=>{}).then(()=>settings().then(s=>apply(s.scripts))).catch(e=>{lastError=e.message;});});
