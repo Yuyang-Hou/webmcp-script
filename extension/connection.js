@@ -28,7 +28,7 @@ export function connectionChecks(state,pages) {
     state.userScriptsAvailable?'用户脚本权限已就绪。':'尚未允许用户脚本：请在扩展详情开启“允许用户脚本”，然后重新检查。',
     state.bridgeStatus==='已连接'?'扩展已连接本机 MCP 服务；仍需让 AI 调用 pages 验证客户端连接。':
       state.bridgeStatus==='未配对'?'尚未配对：先把连接说明发给 AI，再粘贴它返回的连接码。':
-      `本机服务尚未连通（${state.bridgeStatus}）：确认 AI 的 MCP 服务正在运行，使用同一安装目录生成的连接码。不要反复添加服务。`,
+      `本机服务尚未连通（${state.bridgeStatus}）：确认 AI 的 MCP 服务正在运行。若另一浏览器已连接，请让 AI 为当前连接配置独立 WEBMCP_PORT 并重新获取连接码；不要重复添加服务。`,
     !pages.length?'还没有可检查的普通网页，请打开 HTTP(S) 网站后重新检查。':
       `${ready.length} / ${pages.length} 个页面的原生 WebMCP 接口可用，发现 ${ready.reduce((n,p)=>n+p.tools.length,0)} 个工具。`+
       (ready.length<pages.length?' 部分页面不支持或无法读取，请在“网页工具”查看具体原因；没有接口时不要反复重装扩展。':'')

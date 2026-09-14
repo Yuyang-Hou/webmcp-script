@@ -144,6 +144,12 @@ try{
   await popup.locator('.popup-script summary').click();await popup.locator('#scripts input').check();assert.equal(await popup.evaluate(()=>fixture.scripts[0].enabled),true);pass('popup shows current native tools and matching script toggle');
   assert.equal(await popup.locator('h1,#domain,.popup-title').count(),0);
   assert.equal(await popup.locator('#connection').innerText(),'已连接');
+  await popup.evaluate(()=>fixture.pages[0].errors=['本页脚本加载失败']);
+  await popup.getByRole('checkbox').uncheck();
+  await popup.locator('#error').filter({hasText:'本页脚本加载失败'}).waitFor();
+  await popup.evaluate(()=>fixture.pages[0].errors=[]);await popup.getByRole('checkbox').check();
+  await popup.locator('#error').waitFor({state:'hidden'});
+  pass('current page errors are shown and removed after recovery without hiding native tools');
   await popup.evaluate(()=>fixture.scripts[0].name='网页阅读助手 · 一个很长的脚本名称');
   await popup.getByRole('checkbox').uncheck();await popup.getByRole('checkbox').check();
   const scriptLabel=popup.locator('.popup-script-name');assert((await scriptLabel.getAttribute('title')).includes('一个很长的脚本名称'));

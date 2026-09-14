@@ -4,6 +4,7 @@ async function open(hash) {try{await chrome.tabs.create({url:chrome.runtime.getU
 function error(e){$('error').textContent=e.message;$('error').hidden=false;}
 $('manage').onclick=()=>open('scripts');$('new-script').onclick=()=>open('new');$('connect').onclick=()=>open('connection-settings');
 async function render(){
+  $('error').textContent='';$('error').hidden=true;
   const [state,tabs]=await Promise.all([send({type:'status'}),chrome.tabs.query({active:true,currentWindow:true})]);
   const connected=state.bridgeStatus==='已连接';
   $('connection').textContent=connected?'已连接':state.bridgeStatus==='连接中…'?'正在连接…':'未连接';
@@ -39,6 +40,7 @@ async function render(){
   $('tool-list').replaceChildren();
   if(!/^https?:/.test(tab?.url||'')){$('tool-count').textContent='当前页面不支持';return;}
   const page=await send({type:'inspect',pageId:tab.id}), status=discovery(page);$('tool-count').textContent=status.ready?String(page.tools.length):status.text;
+  if(page.errors?.length)error(Error(page.errors.join('；')));
   if(status.ready){
     const groups=new Map();
     for(const tool of page.tools){const key=tool.source?.kind==='script'?`script:${tool.source.id}`:tool.source?.kind||'unknown';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(tool);}
