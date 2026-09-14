@@ -35,7 +35,7 @@ try {
   await manager.locator('a[href="#settings"]').click();await manager.locator('#retry').click();
   const page=await browser.newPage();await page.goto(url);
   await manager.locator('#new-script').click();
-  const source=`// ==UserScript==\n// @id catalog-acceptance\n// @name Catalog acceptance\n// @description Read-only test\n// @version 1\n// @match http://127.0.0.1/*\n// ==/UserScript==\ndocument.modelContext.registerTool({name:'catalog_read',description:'Read test',inputSchema:{type:'object',properties:{}},execute:()=> 'ok'});`;
+  const source=`// ==UserScript==\n// @id catalog-acceptance\n// @name Catalog acceptance\n// @description Read-only test\n// @version 1\n// @webmcp-entry ${JSON.stringify({id:'project',title:'Project read tools',url:url+'{project}',parameters:{project:{description:'Project identifier',example:'demo'}}})}\n// @match http://127.0.0.1/*\n// ==/UserScript==\ndocument.modelContext.registerTool({name:'catalog_read',description:'Read test',inputSchema:{type:'object',properties:{}},execute:()=> 'ok'});`;
   await manager.locator('.cm-content').fill(source);
   await manager.locator('#save').click();await manager.locator('#confirm-save').click();
   await until(async()=>assert.equal((await call('browser_catalog')).scripts.length,1));
@@ -45,12 +45,16 @@ try {
   const catalog=await call('browser_catalog',{query:'acceptance'});
   assert.equal(catalog.scripts[0].version,'1');assert.equal(catalog.entries[0].url,url);
   assert(!JSON.stringify(catalog).includes('source'));assert(!JSON.stringify(catalog).includes(pairingCode));
-  const visited=await call('visit_page',{url:catalog.entries[0].url});
+  assert.equal(catalog.scripts[0].entries[0].id,'project');
+  const resolved=await call('browser_resolve_entry',{scriptId:catalog.scripts[0].id,expectedVersion:'1',entryId:'project',parameters:{project:'demo'}});
+  assert.equal(resolved.url,url+'demo');
+  await assert.rejects(call('browser_resolve_entry',{scriptId:catalog.scripts[0].id,expectedVersion:'stale',entryId:'project',parameters:{project:'demo'}}),/版本已变化/);
+  const visited=await call('visit_page',{url:resolved.url});
   const snapshot=await until(async()=>{const s=await call('inspect_page',{pageId:visited.pageId});assert(s.tools.some(t=>t.name==='catalog_read'));return s;});
   const args={pageId:visited.pageId,revision:snapshot.revision,name:'catalog_read'};
   await call('describe_tool',args);assert.equal((await call('call_tool',{...args,input:{}})).result,'ok');
   await assert.rejects(call('browser_entry',{action:'save',name:'Acceptance test',pageId:visited.pageId,url,expectedUrl:null}),/入口已变化/);
   await call('browser_entry',{action:'remove',name:'Acceptance test',expectedUrl:url});
   assert.equal((await call('browser_catalog')).entries.length,0);
-  console.log('PASS: real Chrome UI install -> MCP catalog with closed page -> saved entry -> visit -> native describe/call -> stale-write rejection -> remove');
+  console.log('PASS: real Chrome UI install -> MCP catalog with closed page -> resolve parameterized entry -> direct visit -> native describe/call -> stale-write rejection -> remove');
 } finally {await client.close();await browser?.close();server.close();await rm(profile,{recursive:true,force:true});}

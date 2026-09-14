@@ -103,6 +103,7 @@ async function save() {
   pending={source:draft.source,replace:base?.id,expectedSource:base?.source,expectedEnabled:base?.enabled};
   $('preview-title').textContent=base?'确认更新脚本':'确认安装脚本';$('preview-name').textContent=script.name;
   $('preview-version').textContent=base?`${base.version} → ${script.version}`:script.version;
+  $('preview-entries').textContent=script.entries.length?script.entries.map(entry=>`${entry.title}: ${entry.url}\n参数: ${JSON.stringify(entry.parameters)}`).join('\n'):'未声明；AI 无法直接解析页面地址';
   $('preview-matches').textContent=script.matches.join('\n');$('preview-state').textContent=script.enabled?'保存后启用':'保留停用状态';
   $('scope-change').textContent=base&&JSON.stringify(base.matches)!==JSON.stringify(script.matches)?`原网站范围：${base.matches.join('，')}`:'';
   message('preview-error');$('preview-dialog').showModal();

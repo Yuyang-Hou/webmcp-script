@@ -1,3 +1,4 @@
+import {resolveEntry} from './entries.js';
 import {prepareImport,parseScript} from './metadata.js';
 import {parsePairing} from './connection.js';
 let socket, connecting = false, bridgeStatus = '未配对', lastError = '', mutation = Promise.resolve();
@@ -150,9 +151,16 @@ async function dispatch(method,params={}) {
     const query=(params.query||'').toLowerCase();
     const matches=value=>JSON.stringify(value).toLowerCase().includes(query);
     return {storage:'connected-chrome-extension',scripts:scripts.map(script=>{
-      const {id,name,version,matches,description}=parseScript(script.source);
-      return {id,name,version,matches,description,enabled:script.enabled};
+      const {id,name,version,matches,description,entries}=parseScript(script.source);
+      return {id,name,version,matches,description,entries,enabled:script.enabled};
     }).filter(matches),entries:entries.filter(matches),nextStep:'使用 pages 或 visit_page 打开已确认的入口，再发现原生工具；安装清单不代表页面工具已就绪。'};
+  }
+  if (method === 'resolve-entry') {
+    const stored=(await settings()).scripts.find(script=>script.id===params.scriptId);
+    if(!stored)throw Error('脚本未安装，请重新查询 browser_catalog');
+    const script={...parseScript(stored.source),enabled:stored.enabled};
+    if(params.expectedVersion!==script.version)throw Error('脚本版本已变化，请重新查询 browser_catalog');
+    return resolveEntry(script,params.entryId,params.parameters??{});
   }
   if (method === 'entry') {
     const action=async()=>{

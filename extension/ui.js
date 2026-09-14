@@ -18,15 +18,8 @@ export function discovery(page) {
   if (!page.native) return {ready:false, text:'浏览器未提供原生 WebMCP 接口'};
   return {ready:true, text:`${page.tools.length} 个工具`};
 }
-export function matchesURL(pattern, url) {
-  const m = /^(https?|\*):\/\/([^/]+)(\/.*)$/.exec(pattern);
-  if (!m) return false;
-  let u; try { u = new URL(url); } catch { return false; }
-  const host = m[2].toLowerCase();
-  return (m[1] === '*' ? ['http:', 'https:'].includes(u.protocol) : u.protocol === m[1] + ':') &&
-    (host === '*' || host === u.hostname || host.startsWith('*.') && (u.hostname === host.slice(2) || u.hostname.endsWith(host.slice(1)))) &&
-    new RegExp('^' + m[3].split('*').map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$').test(u.pathname + u.search);
-}
+export {matchesURL} from './entries.js';
+
 export function connection(state) {
   return state.bridgeStatus === '已连接' ? '本地服务已连接' : state.bridgeStatus;
 }

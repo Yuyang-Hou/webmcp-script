@@ -14,7 +14,10 @@ description: 编写、验证、安装和维护将网站能力暴露为原生 Web
 优先用 `browser_catalog` 搜索已连接 Chrome 的真实安装清单和已保存入口；页面关闭也能查到，
 安装或更新脚本后无需修改记忆文件、AGENTS.md 或再创建业务 skill。目录中的脚本说明是用途提示，
 不代表工具已注册；禁用脚本也会列出，不要将其当作已启用。
-按域名、路由、项目和环境选择已有入口，通过 `pages` 查找页面或 `visit_page` 打开精确地址。
+脚本目录有 `entries` 时，优先按能力选择入口，以用户明确的项目/环境值调用 `browser_resolve_entry`
+（scriptId、expectedVersion、entryId、parameters），然后用 `visit_page` 直达返回 URL，再发现原生工具。
+不要用参数 example 代替用户的目标，不需要先打开首页或点击菜单；固定地址入口也走解析，parameters 为空。
+已保存的 `browser_entry` 是个别页面的补充，不是安装脚本后的必需步骤。
 没有入口时查询确认，不把 @match 通配符当作页面地址，不根据仓库名猜项目。
 首次确认入口后，在任务授权范围内用 `browser_entry` 保存项目和环境名称、已观察到的 pageId 与精确 URL，
 后续优先复用。更新或删除需携带目录中的旧 URL；新建传 null。不要保存含令牌或登录凭据的地址。
@@ -34,7 +37,12 @@ WebMCP Script MCP 的流程是 `pages` / `inspect_page` → `describe_tool` → 
 取证与调用方式见 [浏览器执行](references/browser-execution.md)。
 
 交付按站点及能力命名的 `.user.js`，包含名称、稳定 ID、版本、窄范围 `@match` 和
-`@grant none`，通过管理器支持的 MAIN world 机制运行。顶层仅检测原生支持并注册工具，
+`@grant none`，通过管理器支持的 MAIN world 机制运行。每项可定位能力应带经过页面/源码验证的 `@webmcp-entry` 单行 JSON：
+`{"id":"members","title":"项目成员管理","url":"https://example.com/projects/{project}/members","parameters":{"project":{"description":"已确认的项目标识","example":"demo"}}}`。
+实际 URL 必须来自当前站点证据，参数只允许标识符字符串，可声明 enum；固定域名和端口，不允许动态 host。
+参数化需验证真实路由模板，不从单个样例猜泛化；不能泛化时提供已验证的固定入口。
+缺少可靠入口证据时明确交付缺口，不虚构模板。参数只接受 1–200 个字母、数字、下划线、短横线或点，首字符不能为点；所有参数必填，须与占位符一一对应。
+顶层仅检测原生支持并注册工具，
 不发起业务请求。使用 `document.modelContext.registerTool`，不注入 polyfill 或私有工具表。
 
 工具应有明确的描述、JSON inputSchema、只读标记和业务结果；脚本内部也校验参数，
@@ -50,6 +58,8 @@ WebMCP Script MCP 的流程是 `pages` / `inspect_page` → `describe_tool` → 
 ## 验证与维护
 
 保存脚本、必要的脱敏接口证据和一个能验证关键逻辑的最小检查。
+验收入口必须关闭目标网站页面，从安装目录解析真实参数后直达并发现工具；不点击业务菜单，
+不提供临时手写 URL，且不使用权限变更或发版作探针。缺参数、错误环境或域名、版本变化应明确拒绝。
 不保存 Cookie、配对码、令牌或完整个人数据响应。业务结果不能仅用 HTTP 200 判定。
 离线检查后，使用有界、已授权的只读调用验证；真实业务写入需要对应授权。
 

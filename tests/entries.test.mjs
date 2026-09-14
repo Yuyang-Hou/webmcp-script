@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {parseScript,prepareImport} from '../extension/metadata.js';
+import {resolveEntry} from '../extension/entries.js';
+const entry={id:'members',title:'项目成员',url:'https://console.example.com/#/projects/{project}/members?env={env}',parameters:{project:{description:'已确认项目名',example:'demo'},env:{description:'环境',example:'test',enum:['prod','test']}}};
+const source=e=>`// ==UserScript==\n// @name Test\n// @version 1\n// @match https://console.example.com/*\n// @webmcp-entry ${JSON.stringify(e)}\n// ==/UserScript==\nthrow Error('must not execute');`;
+const parsed=parseScript(source(entry));
+assert.equal(resolveEntry(parsed,'members',{project:'conan-pedia-cms-web',env:'test'}).url,'https://console.example.com/#/projects/conan-pedia-cms-web/members?env=test');
+for(const params of [{},{project:'demo',env:'unknown'},{project:'../admin',env:'test'},{project:'demo?owner=1',env:'test'},{project:'demo',env:'test',extra:'x'}])assert.throws(()=>resolveEntry(parsed,'members',params));
+assert.throws(()=>resolveEntry({...parsed,enabled:false},'members',{project:'demo',env:'test'}),/停用/);
+assert.throws(()=>resolveEntry(parsed,'missing',{}),/不存在/);
+for(const url of ['javascript:alert(1)','https://{project}.example.com/?env={env}','https://evil.example.com/{project}?env={env}','https://user:pass@console.example.com/{project}?env={env}','https://console.example.com/{other}?env={env}','https://console.example.com/{project}/{env}*'])assert.throws(()=>parseScript(source({...entry,url})));
+assert.throws(()=>parseScript(source({...entry,parameters:{...entry.parameters,extra:{description:'unused',example:'value'}}})));
+assert.throws(()=>parseScript(source(entry).replace('// ==/UserScript==',`// @webmcp-entry ${JSON.stringify(entry)}\n// ==/UserScript==`)),/重复/);
+assert.throws(()=>parseScript(source(entry).replace(JSON.stringify(entry),'{oops')),/JSON/);
+const legacy=parseScript(source(entry).split('\n').filter(line=>!line.includes('@webmcp-entry')).join('\n'));assert.deepEqual(legacy.entries,[]);
+const updated=prepareImport(source({...entry,title:'新入口'}).replace('@version 1','@version 2'),[{...parsed,enabled:false}],parsed.id,parsed.source,false);
+assert.equal(updated.enabled,false);assert.equal(updated.previousSource,parsed.source);assert.equal(updated.entries[0].title,'新入口');
+console.log('entries: no code execution, exact URL resolution, required/enumerated parameters, fixed origin, scope, input validation, disabled scripts and compatible updates');

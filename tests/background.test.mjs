@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {prepareImport,parseScript} from '../extension/metadata.js';
+import {resolveEntry} from '../extension/entries.js';
 import {parsePairing} from '../extension/connection.js';
 const sockets=[];
 class WebSocket {
@@ -16,6 +17,7 @@ const badges=new Map(),titles=new Map();
 const context=vm.createContext({WebSocket,URL,setTimeout(){},fetch:async()=>({text:async()=>''}),chrome:{action:{setBadgeText:async({tabId,text})=>badges.set(tabId,text),setBadgeBackgroundColor:async()=>{},setBadgeTextColor:async()=>{},setTitle:async({tabId,title})=>titles.set(tabId,title)},storage:{local:{get:async()=>({scripts:storedScripts,token:'test-token'})}},runtime:{getURL:p=>'chrome-extension://test/'+p,onInstalled:listener,onMessage:{addListener(handler){onMessage=handler;}}},alarms:{create(){},onAlarm:listener},tabs:{query:async()=>[],onRemoved:{addListener(handler){onRemoved=handler;}},onUpdated:{addListener(handler){onUpdated=handler;}},onActivated:{addListener(handler){onActivated=handler;}},sendMessage:()=>new Promise(r=>release=r)},webNavigation:{onHistoryStateUpdated:{addListener(handler){onHistory=handler;}}}}});
 context.parsePairing=parsePairing;
 context.parseScript=parseScript;
+context.resolveEntry=resolveEntry;
 const source=fs.readFileSync(new URL('../extension/background.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'');
 vm.runInContext(source,context);
 await new Promise(setImmediate);

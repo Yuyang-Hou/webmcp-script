@@ -15,7 +15,7 @@ test('standard MCP discovery, authentication, invocation and disconnect', async 
   try {
     await client.connect(transport);
     const tools=(await client.listTools()).tools;
-    assert.deepEqual(tools.map(x=>x.name).sort(),['browser_catalog','browser_entry','call_tool','connection_info','describe_tool','inspect_page','native_build','native_launch','native_select_build','pages','script_change','script_import','script_library_status','script_preview','visit_page']);
+    assert.deepEqual(tools.map(x=>x.name).sort(),['browser_catalog','browser_entry','browser_resolve_entry','call_tool','connection_info','describe_tool','inspect_page','native_build','native_launch','native_select_build','pages','script_change','script_import','script_library_status','script_preview','visit_page']);
     const setup=await client.callTool({name:'connection_info',arguments:{}});
     assert(!setup.isError);
     assert.deepEqual(JSON.parse(JSON.parse(setup.content[0].text).pairingCode),{version:1,token,port});
@@ -35,6 +35,9 @@ test('standard MCP discovery, authentication, invocation and disconnect', async 
     assert.equal(JSON.parse(catalog.content[0].text).params.query,'console');
     const entry=await client.callTool({name:'browser_entry',arguments:{action:'save',name:'test',pageId:1,url:'https://example.com/',expectedUrl:null}});
     assert.equal(JSON.parse(entry.content[0].text).method,'entry');
+    const resolved=await client.callTool({name:'browser_resolve_entry',arguments:{scriptId:'example',entryId:'members',expectedVersion:'1',parameters:{project:'demo'}}});
+    assert.equal(JSON.parse(resolved.content[0].text).method,'resolve-entry');
+    assert.deepEqual(JSON.parse(resolved.content[0].text).params.parameters,{project:'demo'});
     const pages=await client.callTool({name:'pages',arguments:{}});
     const discovered=JSON.parse(pages.content[0].text).pages;
     assert.equal(discovered[0].discoveryStatus,'unsupported');assert.ok(discovered[0].errors.length);

@@ -1,3 +1,4 @@
+import {parseEntries} from './entries.js';
 export function parseScript(source) {
   if (typeof source !== 'string' || source.length > 1024 * 1024) throw Error('脚本应小于 1 MB');
   const block = source.match(/\/\/ ==UserScript==([\s\S]*?)\/\/ ==\/UserScript==/);
@@ -23,7 +24,7 @@ export function parseScript(source) {
   const id = explicitId || `userscript-${hash.toString(16).padStart(16, '0')}`;
   const header = block[0].replace(/^(\s*\/\/\s*@match[ \t]+)([^\r\n]+)$/gm, (_, prefix, value) => prefix + unwrap(value.trim()));
   source = source.slice(0, block.index) + header + source.slice(block.index + block[0].length);
-  return {id,name,namespace,version,matches,description:get('description')[0]||'',source,enabled:true};
+  return {id,name,namespace,version,matches,description:get('description')[0]||'',entries:parseEntries(get('webmcp-entry'),matches),source,enabled:true};
 }
 
 export function prepareImport(source, scripts, replace, expectedSource, expectedEnabled) {
@@ -45,6 +46,7 @@ export function createScriptTemplate() {
 // @version 0.1.0
 // @description 为网站添加 WebMCP 工具
 // @match https://example.com/*
+// @webmcp-entry {"id":"home","title":"网站首页标题读取","url":"https://example.com/"}
 // @run-at document-idle
 // @inject-into page
 // @grant none
