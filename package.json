@@ -1,6 +1,6 @@
 {
   "name": "webmcp-script",
-  "version": "0.3.0",
+  "version": "0.4.0-beta.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,15 +8,28 @@
     "test": "node --test tests/*.test.mjs",
     "build": "node scripts/build.mjs",
     "demo": "node scripts/demo.mjs",
-    "test:browser": "node tests/browser-e2e.mjs",
-    "check:spec": "openspec validate --all --strict"
+    "test:browser": "pnpm test:ui && pnpm test:native-browser",
+    "test:native-browser": "node tests/native-bundle-browser.mjs",
+    "bundle:native": "node scripts/bundle-native.mjs",
+    "scripts": "node scripts/library.mjs",
+    "check:spec": "openspec validate --all --strict",
+    "pretest": "pnpm build",
+    "test:ui": "pnpm build && node tests/ui-browser.mjs",
+    "package": "node scripts/package.mjs",
+    "test:package": "pnpm package && node tests/package.mjs"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.11.0",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/search": "^6.7.2",
+    "@codemirror/view": "^6.43.11",
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "codemirror": "^6.0.2",
     "ws": "^8.18.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "playwright": "^1.58.2"
   },
   "engines": {

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {prepareImport} from '../extension/metadata.js';
+import {parsePairing} from '../extension/connection.js';
 const sockets=[];
 class WebSocket {
   constructor(){this.readyState=0;this.sent=[];sockets.push(this);}
@@ -9,10 +10,12 @@ class WebSocket {
   close(){this.readyState=3;this.onclose?.();}
   open(){this.readyState=1;this.onopen?.();}
 }
-let release, onMessage, onHistory, storedScripts=[];
+let release, onMessage, onHistory, onUpdated, onActivated, onRemoved, storedScripts=[];
 const listener={addListener(){}};
-const context=vm.createContext({WebSocket,URL,setTimeout(){},fetch:async()=>({text:async()=>''}),chrome:{storage:{local:{get:async()=>({scripts:storedScripts,token:'test-token'})}},runtime:{getURL:p=>'chrome-extension://test/'+p,onInstalled:listener,onMessage:{addListener(handler){onMessage=handler;}}},alarms:{create(){},onAlarm:listener},tabs:{onRemoved:listener,onUpdated:listener,sendMessage:()=>new Promise(r=>release=r)},webNavigation:{onHistoryStateUpdated:{addListener(handler){onHistory=handler;}}}}});
-const source=fs.readFileSync(new URL('../extension/background.js',import.meta.url),'utf8').replace("import {prepareImport} from './metadata.js';",'');
+const badges=new Map(),titles=new Map();
+const context=vm.createContext({WebSocket,URL,setTimeout(){},fetch:async()=>({text:async()=>''}),chrome:{action:{setBadgeText:async({tabId,text})=>badges.set(tabId,text),setBadgeBackgroundColor:async()=>{},setBadgeTextColor:async()=>{},setTitle:async({tabId,title})=>titles.set(tabId,title)},storage:{local:{get:async()=>({scripts:storedScripts,token:'test-token'})}},runtime:{getURL:p=>'chrome-extension://test/'+p,onInstalled:listener,onMessage:{addListener(handler){onMessage=handler;}}},alarms:{create(){},onAlarm:listener},tabs:{query:async()=>[],onRemoved:{addListener(handler){onRemoved=handler;}},onUpdated:{addListener(handler){onUpdated=handler;}},onActivated:{addListener(handler){onActivated=handler;}},sendMessage:()=>new Promise(r=>release=r)},webNavigation:{onHistoryStateUpdated:{addListener(handler){onHistory=handler;}}}}});
+context.parsePairing=parsePairing;
+const source=fs.readFileSync(new URL('../extension/background.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'');
 vm.runInContext(source,context);
 await new Promise(setImmediate);
 sockets[0].open();
@@ -33,6 +36,50 @@ context.chrome.userScripts={execute:async()=>[{result:undefined}]};
 await assert.rejects(vm.runInContext("checkSyntax({source:'const = ;'})",context),/语法检查失败/);
 context.chrome.userScripts.execute=async()=>[{result:true}];
 await vm.runInContext("checkSyntax({source:'const valid = 1;'})",context);
+// Chrome Web Store is HTTPS but cannot be scripted; exclude it in every injection path.
+const restricted=['https://chromewebstore.google.com/detail/test','https://chrome.google.com/webstore/detail/test'];
+for(const url of [...restricted,'chrome://extensions/','invalid'])assert.equal(vm.runInContext(`canScriptURL(${JSON.stringify(url)})`,context),false);
+assert.equal(vm.runInContext("canScriptURL('https://chromewebstore.google.com.example.com/')",context),true);
+context.chrome.tabs.query=async()=>[...restricted.map((url,i)=>({id:i+10,url})),{id:20,url:'https://example.com/'}];
+const injectionTargets=[];
+context.chrome.scripting={executeScript:async({target})=>{injectionTargets.push(target.tabId);return [];}};
+context.chrome.userScripts={getScripts:async()=>[],register:async()=>{},unregister:async()=>{},execute:async({target})=>{injectionTargets.push(target.tabId);return [{result:true}];}};
+await vm.runInContext("checkSyntax({source:'const valid = 1;'})",context);
+await vm.runInContext('apply([], ["removed"])',context);
+for(const url of restricted)await vm.runInContext(`inject({id:10,url:${JSON.stringify(url)}},[])`,context);
+assert(injectionTargets.length>1);assert(injectionTargets.every(id=>id===20));
+assert.equal(vm.runInContext('lastError',context),'');
+const originalMessage=context.chrome.tabs.sendMessage;
+context.chrome.tabs.sendMessage=async id=>{assert.equal(id,20);return {result:{native:true,tools:[]}};};
+const restrictedPages=await vm.runInContext("dispatch('pages')",context);
+assert.match(restrictedPages.pages[0].error,/扩展商店/);assert.equal(restrictedPages.pages[2].native,true);
+// A discarded frame is not a global failure; real failures stay on their own current page.
+context.chrome.tabs.sendMessage=async()=>({result:{native:true,tools:[]}});
+context.chrome.scripting.executeScript=async()=>{throw Error('Frame with ID 0 was removed.');};
+await vm.runInContext('apply([])',context);
+assert.equal(vm.runInContext('lastError',context),'');
+assert.equal((await vm.runInContext("page(20,'inspect')",context)).errors,undefined);
+context.chrome.scripting.executeScript=async()=>{throw Error('CSP blocked script');};
+await vm.runInContext('apply([])',context);
+assert.deepEqual(Array.from((await vm.runInContext("page(20,'inspect')",context)).errors),['CSP blocked script']);
+assert.equal((await vm.runInContext("page(21,'inspect')",context)).errors,undefined);
+assert.equal(vm.runInContext('lastError',context),'');
+onUpdated(20,{status:'loading'});
+assert.equal((await vm.runInContext("page(20,'inspect')",context)).errors,undefined);
+let failInjection;
+context.chrome.scripting.executeScript=()=>new Promise((_,reject)=>failInjection=reject);
+const navigationRace=vm.runInContext('apply([])',context);await new Promise(setImmediate);
+onUpdated(20,{url:'https://example.com/new'});failInjection(Error('late script failure'));await navigationRace;
+assert.equal(vm.runInContext('pageStates.has(20)',context),false);
+context.chrome.scripting.executeScript=async()=>{throw Error('real failure');};
+await vm.runInContext('apply([])',context);onRemoved(20);
+assert.equal(vm.runInContext('pageStates.has(20)',context),false);
+await vm.runInContext('apply([])',context);
+context.chrome.scripting.executeScript=async()=>[];await vm.runInContext('apply([])',context);
+assert.equal((await vm.runInContext("page(20,'inspect')",context)).errors,undefined);
+onMessage({type:'changed',errors:['other page runtime failure']},{tab:{id:20},frameId:0},()=>{});
+assert.equal(vm.runInContext('lastError',context),'');
+context.chrome.tabs.sendMessage=originalMessage;
 context.chrome.tabs.query=async()=>[];
 await assert.rejects(vm.runInContext("checkSyntax({source:''})",context),/先打开/);
 context.chrome.tabs.get=async id=>({id,url:'http://localhost/'});
@@ -44,7 +91,7 @@ await Promise.resolve();assert.equal(context.injected.length,0);
 storedScripts=[];context.finishMutation();await historyTask;
 assert.deepEqual(Array.from(context.injected[0]),[]);
 for(const port of [0,65536,1.5,'not-a-port']) {
-  const response=await new Promise(resolve=>onMessage({type:'pair',token:'test',port},{url:'chrome-extension://test/manager.html'},resolve));
+  const response=await new Promise(resolve=>onMessage({type:'pair',token:'a'.repeat(64),port},{url:'chrome-extension://test/manager.html'},resolve));
   assert.match(response.error.message,/端口/);
 }
 context.prepareImport=prepareImport;
@@ -62,3 +109,53 @@ const before=sockets.length;context.chrome.storage.local.get=async()=>({token:'t
 await vm.runInContext('socket.close();socket=undefined;connecting=false;connect()',context);
 assert.equal(sockets.length,before);assert.match(vm.runInContext('bridgeStatus',context),/端口无效/);
 console.log('background: disconnected call never replies to a replacement connection');
+context.chrome.tabs.query=async()=>[{id:7,url:'https://example.com/',title:'Native site'}];
+context.chrome.tabs.sendMessage=async()=>({result:{native:true,implementation:'native-0.4',tools:[{name:'website_native'}]}});
+const uiPages=await new Promise(resolve=>onMessage({type:'pages'},{url:'chrome-extension://test/manager.html'},resolve));
+assert.equal(uiPages.result.pages[0].tools[0].name,'website_native');
+const uiInspect=await new Promise(resolve=>onMessage({type:'inspect',pageId:7},{url:'chrome-extension://test/popup.html'},resolve));
+assert.equal(uiInspect.result.pageId,7);
+assert.equal(onMessage({type:'pages'},{url:'https://example.com/'},()=>assert.fail('website cannot access manager messages')),undefined);
+
+// The production wrapper accepts plain scripts and does not repeat side effects.
+const ordinary={id:'ordinary',matches:['https://example.com/*'],source:"document.modelContext.registerTool({name:'site_read'});"};
+const ordinaryCode=await vm.runInContext(`sourceFor(${JSON.stringify(ordinary)})`,context);
+let nativeRegistrations=0;const pageErrors=[];
+const nativePage=vm.createContext({document:{modelContext:{registerTool(){nativeRegistrations++;}}},WebMCPScript:{lifecycleVersion:1,beginScript(){return ()=>{};},request(_method,params){pageErrors.push(params.message);}}});
+vm.runInContext(ordinaryCode,nativePage);vm.runInContext(ordinaryCode,nativePage);
+assert.equal(nativeRegistrations,1);assert.deepEqual(pageErrors,[]);
+const changedCode=await vm.runInContext(`sourceFor(${JSON.stringify({...ordinary,source:ordinary.source+'// update'})})`,context);
+assert.throws(()=>vm.runInContext(changedCode,nativePage),/刷新/);assert.equal(nativeRegistrations,1);
+const partialCode=await vm.runInContext(`sourceFor(${JSON.stringify({...ordinary,id:'partial',source:"globalThis.partial=(globalThis.partial||0)+1;throw Error('partial failure');"})})`,context);
+assert.throws(()=>vm.runInContext(partialCode,nativePage),/partial failure/);vm.runInContext(partialCode,nativePage);assert.equal(nativePage.partial,1);
+
+// Badges describe this tab's native tools, with connection failures taking priority.
+await new Promise(setImmediate);
+context.chrome.tabs.query=async()=>[{id:7},{id:8}];
+context.chrome.tabs.get=async id=>({id,url:'https://example.com/',status:'complete'});
+let snapshot={native:true,tools:[{name:'site_native'},{name:'script_native'}]};
+context.chrome.tabs.sendMessage=async()=>({result:snapshot});
+await vm.runInContext("bridgeStatus='已连接';refreshBadge(7)",context);
+assert.equal(badges.get(7),'2');assert.match(titles.get(7),/当前页 2 个/);
+snapshot={native:true,tools:[]};onActivated({tabId:8});await new Promise(setImmediate);
+assert.equal(badges.get(8),'0');assert.equal(badges.get(7),'2');
+snapshot={native:true,tools:Array.from({length:100},()=>({}))};
+onMessage({type:'changed'},{tab:{id:7},frameId:0},()=>{});await new Promise(setImmediate);
+assert.equal(badges.get(7),'99+');assert.match(titles.get(7),/100 个/);
+snapshot={native:false,tools:[]};await vm.runInContext('refreshBadge(7)',context);assert.equal(badges.get(7),'');
+snapshot={native:true,tools:[],errors:['registration failed']};await vm.runInContext('refreshBadge(7)',context);assert.equal(badges.get(7),'!');
+context.chrome.tabs.sendMessage=async()=>{throw Error('not ready');};
+await vm.runInContext('refreshBadge(7)',context);assert.equal(badges.get(7),'?');
+let finishInspect;context.chrome.tabs.sendMessage=()=>new Promise(resolve=>finishInspect=resolve);
+const stale=vm.runInContext('refreshBadge(7)',context);await new Promise(setImmediate);
+onUpdated(7,{status:'loading'});await new Promise(setImmediate);
+assert.equal(badges.get(7),'');
+finishInspect({result:{native:true,tools:[{}]}});await stale;assert.equal(badges.get(7),'');
+context.chrome.tabs.sendMessage=async()=>({result:{native:true,tools:[{},{}]}});
+vm.runInContext("setBridgeStatus('连接断开，自动重连中')",context);await new Promise(setImmediate);
+assert.equal(badges.get(7),'!');assert.equal(badges.get(8),'!');assert.match(titles.get(7),/连接断开/);
+vm.runInContext("setBridgeStatus('已连接')",context);await new Promise(setImmediate);assert.equal(badges.get(7),'2');
+context.chrome.tabs.get=async id=>({id,url:'chrome://newtab/'});
+await vm.runInContext('refreshBadge(7)',context);assert.equal(badges.get(7),'');
+onRemoved(7);assert.equal(vm.runInContext('badgeRequests.has(7)',context),false);
+console.log('badges: native counts, per-tab updates, failures, reconnect and stale navigation results checked');

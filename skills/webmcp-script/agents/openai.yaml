@@ -1,0 +1,4 @@
+interface:
+  display_name: "WebMCP Script"
+  short_description: "编写、验证和维护网站原生 WebMCP 用户脚本，并排查连接与安装"
+  default_prompt: "使用 $webmcp-script 将当前网站的指定能力做成可复用用户脚本，并验证安装和只读调用。"

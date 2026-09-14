@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "WebMCP Script",
-  "version": "0.3.0",
+  "version": "0.4.0.2",
   "minimum_chrome_version": "135",
-  "description": "独立网站脚本与本地 AI WebMCP 桥接",
+  "description": "为 AI 连接网页原生 WebMCP 工具，管理可独立分享的网站脚本。",
   "permissions": [
     "storage",
     "scripting",
@@ -22,9 +22,17 @@
   },
   "action": {
     "default_title": "WebMCP Script",
-    "default_popup": "manager.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "24": "icons/icon-24.png",
+      "32": "icons/icon-32.png"
+    }
   },
-  "options_page": "manager.html",
+  "options_ui": {
+    "page": "manager.html",
+    "open_in_tab": true
+  },
   "content_scripts": [
     {
       "matches": [
@@ -36,5 +44,12 @@
       ],
       "run_at": "document_start"
     }
-  ]
+  ],
+  "version_name": "0.4.0-beta.2",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
 }
