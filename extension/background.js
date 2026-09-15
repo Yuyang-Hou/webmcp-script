@@ -44,7 +44,7 @@ async function refreshBadge(tabId, loading=false) {
     if(snapshot.errors?.length)return await paint('!','#b4483c','页面工具异常 · 打开插件查看详情');
     if(snapshot.native!==true||!Array.isArray(snapshot.tools))return await paint('?','#986b24','页面工具尚未就绪');
     const count=snapshot.tools.length;
-    await paint(count>99?'99+':String(count),count?'#28834d':'#737780',`本地桥接已连接 · 当前页 ${count} 个 WebMCP 工具`);
+    await paint(count>99?'99+':count?String(count):'',count?'#28834d':'#737780',`本地桥接已连接 · 当前页 ${count} 个 WebMCP 工具`);
   } catch {
     await paint('?','#986b24','无法读取页面工具 · 打开插件查看详情').catch(()=>{});
   }
@@ -144,7 +144,86 @@ async function apply(scripts, removed=[]) {
   notify();
   void refreshBadges();
 }
+async function manageScript(message) {
+    const state=await settings(); let scripts=state.scripts, removed=[];
+    if(message.type==='import') {
+      const script=prepareImport(message.source,scripts,message.replace,message.expectedSource,message.expectedEnabled), old=scripts.find(s=>s.id===script.id);
+      await checkSyntax(script);
+      if(old) removed.push(old.id);
+      scripts=[...scripts.filter(s=>s.id!==script.id),script];
+    } else if(message.type==='toggle') { removed=[message.id];scripts=scripts.map(s=>s.id===message.id?{...s,enabled:!!message.enabled}:s); }
+    else if(message.type==='remove') {removed=[message.id];scripts=scripts.filter(s=>s.id!==message.id);}
+    else throw Error('未知管理操作');
+    await apply(scripts,removed);
+    try { await chrome.storage.local.set({scripts}); notify(); } catch(error) {
+      try { await apply(state.scripts,scripts.map(script=>script.id)); }
+      catch(rollbackError) { throw Error(`保存失败：${error.message}；自动恢复未完成：${rollbackError.message}。请重试加载以恢复已保存版本。`); }
+      const recoveryErrors=[...pageStates.values()].map(state=>state.error).filter(Boolean);
+      if(recoveryErrors.length) throw Error(`保存失败：${error.message}；已恢复脚本注册，但部分页面未恢复：${recoveryErrors.join('；')}`);
+      throw Error(`保存失败：${error.message}；已恢复原有脚本与页面状态。`);
+    }
+    return {ok:true};
+}
+const scriptPreviews=new Map();
+const scriptHash=async value=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),b=>b.toString(16).padStart(2,'0')).join('');
+async function scriptSummary(script) {
+  if(!script)return null;
+  const {id,name,version,matches,description,entries}=parseScript(script.source);
+  return {id,name,version,matches,description,entries,enabled:script.enabled,sha256:await scriptHash(script.source),canRestore:!!script.previousSource};
+}
+async function manageBrowserScript(method,params) {
+  const {scripts}=await settings();
+  if(method==='script-get') {
+    const script=scripts.find(s=>s.id===params.id);
+    if(!script)throw Error('脚本不存在，请查询 browser_catalog');
+    if(!['current','previous'].includes(params.version??'current'))throw Error('无效源码版本');
+    const source=params.version==='previous'?script.previousSource:script.source;
+    if(source===undefined)throw Error('没有可恢复的上一版');
+    const offset=params.offset??0,limit=params.limit??64000;
+    if(!Number.isInteger(offset)||offset<0||offset>source.length||!Number.isInteger(limit)||limit<1||limit>64000)throw Error('无效源码分页');
+    return {storage:'connected-chrome-extension',script:await scriptSummary(script),version:params.version??'current',sha256:await scriptHash(source),source:source.slice(offset,offset+limit),offset,totalLength:source.length,nextOffset:offset+limit<source.length?offset+limit:null};
+  }
+  if(method==='script-preview') {
+    const {action}=params;
+    if(!['import','enable','disable','remove','restore'].includes(action))throw Error('未知脚本管理操作');
+    if(action!=='import'&&(typeof params.id!=='string'||!params.id))throw Error('需要脚本 ID');
+    const parsed=action==='import'?parseScript(params.source):null;
+    if(parsed&&params.id!==undefined&&params.id!==parsed.id)throw Error('脚本 ID 与源码不一致');
+    const old=scripts.find(s=>s.id===(parsed?.id??params.id));
+    if(!parsed&&!old)throw Error('脚本不存在，请查询 browser_catalog');
+    if((action==='enable'&&old.enabled)||(action==='disable'&&!old.enabled))throw Error('脚本已处于目标启停状态，无需修改');
+    let next,message;
+    if(action==='import'||action==='restore') {
+      const source=parsed?.source??old.previousSource;
+      if(source===undefined)throw Error('没有可恢复的上一版');
+      next=prepareImport(source,scripts,old?.id,old?.source,old?.enabled);
+      message={type:'import',source:next.source,replace:old?.id,expectedSource:old?.source,expectedEnabled:old?.enabled};
+    } else if(action==='remove')message={type:'remove',id:old.id};
+    else {next={...old,enabled:action==='enable'};message={type:'toggle',id:old.id,enabled:next.enabled};}
+    const now=Date.now();
+    for(const [token,preview] of scriptPreviews)if(preview.expiresAt<=now)scriptPreviews.delete(token);
+    if(scriptPreviews.size>=20)throw Error('待提交预览过多，请完成已有预览或等待五分钟后重试');
+    const token=crypto.randomUUID(),expiresAt=now+300000;
+    scriptPreviews.set(token,{message,fingerprint:await scriptHash(JSON.stringify(scripts)),expiresAt,id:next?.id??old.id});
+    return {storage:'connected-chrome-extension',token,expiresAt,action,before:await scriptSummary(old),after:await scriptSummary(next),effect:action==='remove'?'卸载并删除当前和上一版源码；不会撤销已经发生的网站操作。':'保存后应用到匹配网页；启用脚本会执行源码，普通脚本更新或重新启用后可能需要刷新页面。',pageVerification:'提交后需重新发现页面工具；预览不会执行脚本。'};
+  }
+  if(method==='script-commit') {
+    if(typeof params.token!=='string')throw Error('需要预览 token');
+    const preview=scriptPreviews.get(params.token);
+    scriptPreviews.delete(params.token);
+    if(!preview||preview.expiresAt<=Date.now())throw Error('预览已过期或已使用，请重新预览');
+    if(preview.fingerprint!==await scriptHash(JSON.stringify(scripts)))throw Error('脚本状态已变化，请重新预览');
+    await manageScript(preview.message);
+    const current=(await settings()).scripts.find(s=>s.id===preview.id);
+    return {storage:'connected-chrome-extension',saved:true,script:await scriptSummary(current),removed:!current,pageErrors:[...pageStates].filter(([,state])=>state.error).map(([pageId,state])=>({pageId,error:state.error})),pageVerification:'脚本已保存；普通脚本更新或重新启用后需刷新页面并重新发现工具，不能据此声称新版工具已可用。'};
+  }
+  throw Error('未知脚本管理操作');
+}
 async function dispatch(method,params={}) {
+  if(['script-get','script-preview','script-commit'].includes(method)) {
+    mutation=mutation.catch(()=>{}).then(()=>manageBrowserScript(method,params));
+    return mutation;
+  }
   if (method === 'catalog') {
     if(params.query!==undefined&&(typeof params.query!=='string'||params.query.length>200))throw Error('无效搜索词');
     const {scripts}=await settings(), {entries=[]}=await chrome.storage.local.get('entries');
@@ -246,24 +325,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
     if(message.type==='inspect') return dispatch('inspect',{pageId:message.pageId});
     if(message.type==='pair') {const {token,port}=parsePairing(message.token,message.port??17891);await chrome.storage.local.set({token,port});socket?.close();socket=undefined;connecting=false;await connect();return {ok:true};}
     if(message.type==='retry') {const state=await settings();await apply(state.scripts);await connect();return {ok:true};}
-    const state=await settings(); let scripts=state.scripts, removed=[];
-    if(message.type==='import') {
-      const script=prepareImport(message.source,scripts,message.replace,message.expectedSource,message.expectedEnabled), old=scripts.find(s=>s.id===script.id);
-      await checkSyntax(script);
-      if(old) removed.push(old.id);
-      scripts=[...scripts.filter(s=>s.id!==script.id),script];
-    } else if(message.type==='toggle') { removed=[message.id];scripts=scripts.map(s=>s.id===message.id?{...s,enabled:!!message.enabled}:s); }
-    else if(message.type==='remove') {removed=[message.id];scripts=scripts.filter(s=>s.id!==message.id);}
-    else throw Error('未知管理操作');
-    await apply(scripts,removed);
-    try { await chrome.storage.local.set({scripts}); notify(); } catch(error) {
-      try { await apply(state.scripts,scripts.map(script=>script.id)); }
-      catch(rollbackError) { throw Error(`保存失败：${error.message}；自动恢复未完成：${rollbackError.message}。请重试加载以恢复已保存版本。`); }
-      const recoveryErrors=[...pageStates.values()].map(state=>state.error).filter(Boolean);
-      if(recoveryErrors.length) throw Error(`保存失败：${error.message}；已恢复脚本注册，但部分页面未恢复：${recoveryErrors.join('；')}`);
-      throw Error(`保存失败：${error.message}；已恢复原有脚本与页面状态。`);
-    }
-    return {ok:true};
+    return manageScript(message);
   };
   mutation=mutation.catch(()=>{}).then(action);
   mutation.then(result=>reply({result}),error=>{if(!['inspect','pages','status'].includes(message.type))lastError=error.message;reply({error:{message:error.message}});});

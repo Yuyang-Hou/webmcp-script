@@ -4,10 +4,11 @@ import {WebSocketServer,WebSocket} from 'ws';
 import {config,version} from './config.mjs';
 const {token,port,idleMs}=await config();
 const clients=new Set(),pending=new Map();
-const methods=new Set(['catalog','resolve-entry','entry','pages','inspect','describe','call','visit']);
+const methods=new Set(['catalog','resolve-entry','entry','script-get','script-preview','script-commit','pages','inspect','describe','call','visit']);
 let peer,sequence=0,idle;
 const send=(ws,message)=>{if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify(message));};
 const changed=()=>{for(const client of clients)send(client,{type:'changed'});};
+const log=message=>console.error(`${new Date().toISOString()} ${message}`);
 const http=createServer((_req,res)=>{res.writeHead(404);res.end('WebMCP Script local relay');});
 const wss=new WebSocketServer({noServer:true,maxPayload:2*1024*1024});
 function authorized(supplied) {const a=Buffer.from(supplied||''),b=Buffer.from(token);return a.length===b.length&&timingSafeEqual(a,b);}
@@ -26,12 +27,19 @@ function settle(id,result,error) {
 }
 function scheduleIdle() {
   clearTimeout(idle);
-  if(clients.size===0)idle=setTimeout(()=>{peer?.terminate();wss.close();http.close();},idleMs);
+  if(clients.size===0)idle=setTimeout(()=>{log('idle exit: no MCP clients');peer?.terminate();wss.close();http.close();},idleMs);
+}
+function dispatch(id,task) {
+  clearTimeout(task.timer);
+  task.timer=setTimeout(()=>settle(id,undefined,'TIMEOUT: operation outcome unknown; do not automatically retry.'),25000);
+  const message=task.message;delete task.message;
+  send(peer,{id,...message});
 }
 wss.on('connection',(ws,extension)=>{
   ws.on('error',()=>{});
   let heartbeat;
-  if(extension){peer=ws;heartbeat=setInterval(()=>send(ws,{type:'ping'}),20000);changed();}
+  log(`${extension?'extension':'client'} connected`);
+  if(extension){peer=ws;heartbeat=setInterval(()=>send(ws,{type:'ping'}),20000);changed();for(const [id,task] of pending)if(task.message)dispatch(id,task);}
   else{clients.add(ws);clearTimeout(idle);send(ws,{type:'hello',protocol:1,version});}
   ws.on('message',raw=>{
     let msg;try {msg=JSON.parse(raw);}catch{ws.close(1003);return;}
@@ -42,14 +50,15 @@ wss.on('connection',(ws,extension)=>{
       return;
     }
     if(!Number.isSafeInteger(msg.id)||msg.id<1||!methods.has(msg.method)||!msg.params||typeof msg.params!=='object'||Array.isArray(msg.params)){ws.close(1003);return;}
-    if(!peer||peer.readyState!==WebSocket.OPEN){send(ws,{id:msg.id,error:{message:'EXTENSION_DISCONNECTED: open the manager and pair this browser.'}});return;}
     if(pending.size>=128){send(ws,{id:msg.id,error:{message:'BRIDGE_BUSY: too many outstanding requests.'}});return;}
     const id=++sequence;
-    const timer=setTimeout(()=>settle(id,undefined,'TIMEOUT: operation outcome unknown; do not automatically retry.'),25000);
-    pending.set(id,{client:ws,id:msg.id,timer});
-    send(peer,{id,method:msg.method,params:msg.params});
+    const timer=setTimeout(()=>settle(id,undefined,'EXTENSION_DISCONNECTED: browser did not reconnect within 30 seconds; request was not sent. Check Chrome, saved pairing and port; connection loss does not imply invalid pairing.'),30000);
+    const task={client:ws,id:msg.id,timer,message:{method:msg.method,params:msg.params}};
+    pending.set(id,task);
+    if(peer?.readyState===WebSocket.OPEN)dispatch(id,task);
   });
-  ws.on('close',()=>{
+  ws.on('close',code=>{
+    log(`${extension?'extension':'client'} disconnected: code=${code}`);
     clearInterval(heartbeat);
     if(extension&&peer===ws){peer=undefined;for(const id of pending.keys())settle(id,undefined,'DISCONNECTED: operation outcome may be unknown; do not automatically retry.');changed();}
     if(!extension){clients.delete(ws);for(const [id,task] of pending)if(task.client===ws){clearTimeout(task.timer);pending.delete(id);}scheduleIdle();}

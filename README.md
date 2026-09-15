@@ -57,6 +57,10 @@ AI 可用 `browser_catalog` 搜索当前 Chrome 扩展已安装的脚本及保�
 
 这些工具需要扩展和 MCP 同时更新并重新连接。安装清单不做网站代码变更检测，不保证已安装脚本仍兼容网站；实际能力仍以当前页面原生发现和只读验证为准。
 
+### AI 管理 Chrome 脚本（源码新增）
+
+通过 `browser_catalog` 找脚本，`browser_script_get` 读源码，`browser_script_preview` 预览安装、更新、启停、卸载或恢复上一版，再用 `browser_script_commit` 保存到已连接 Chrome。AI 和管理页面共用保存与回滚流程，旧预览不会覆盖新修改。安装和启用会执行匹配网页上的代码；保存成功后仍需验证页面工具。详见 [AI 脚本管理](docs/ai-script-management.md)。
+
 ### 配套 skill：WebMCP Script
 
 [WebMCP Script skill](skills/webmcp-script/SKILL.md)（原 web-code）随源码及后续预构建包维护，指导 AI 编写、验证、安装和修复网站用户脚本。调用名为 `$webmcp-script`；它不替代扩展或 MCP 服务，也不自动授权网站操作。已发布的旧版 ZIP 不包含此新增文件。
