@@ -50,3 +50,17 @@ CLI/MCP 使用该库自己的 profile 目录。如果它已经在运行，返回
 之前交付的固定版本 `.app` 启动器仍指向其验收包，不自动读取此脚本库；要使用选定构建，应走这里的 native_launch / CLI launch。不能将旧启动器的成功当作新库生效。
 
 新增工具已用独立 MCP 客户端完成协议测试。正在运行的旧 MCP 进程需要重新连接后才会提供新增工具，无需修改原有服务入口配置。
+
+## 检查与自动更新
+
+更新地址由脚本作者在 UserScript 头部维护 `@updateURL` 和 `@downloadURL`。两个字段可指向同一份完整 HTTPS 源码；不提供用户地址输入框或 MCP 地址覆盖。没有声明地址时提示作者补充，自动模式不可选。
+
+管理面板 → 脚本 → 更新：勾选“自动检查更新（每天）”，再按需勾选“并自动安装更新”。勾选立即保存，取消检查会同时取消安装；不勾选为手动模式。声明 URL 本身不会开启自动模式。来源变化会暂停自动模式，需重新选择，不使用旧设置覆盖脚本头。
+
+AI 流程：先 `browser_script_get` 读取源码和更新设置，再用 `browser_script_update_settings` 传 id、expectedSha256、expectedRevision（首次 null）和 mode（manual/notify/auto）。不传 URL。自动安装需用户明确选择并信任未来代码；设置变化不会抹掉已有本地修改基线。
+
+`browser_script_check_update({id})` 始终只检查；`browser_script_preview({action:"update",id})` 返回冻结的 candidateSource 和 reviewReasons。审阅后用 `browser_script_commit({token})` 保存。版本增加、身份一致、来源和网站范围无变化且本机基线一致时才可自动安装。手动审阅允许来源变化，保存后暂停自动模式并从新版头部重新选择。
+
+Chrome 运行时每五分钟处理一个到期脚本，每个脚本间隔至少 24 小时；无 MCP 或业务页面时也能检查，休眠后补查。结果显示在列表和更新弹窗。更新保留启停状态和上一版源码，在下一次打开或完整刷新页面时执行；不自动刷新业务页面。保存不等于新版工具已可用。
+
+仅直接 HTTPS、最大 1 MiB UTF-8、每次下载 8 秒超时，不带 Cookie；拒绝登录 HTML、跨站跳转及元数据/下载内容不一致。数字点分和 SemVer 预发布版本可比较；同版本源码不同、版本回退不覆盖。语法检查不执行源码。

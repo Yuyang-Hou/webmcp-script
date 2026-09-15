@@ -24,7 +24,7 @@ export function parseScript(source) {
   const id = explicitId || `userscript-${hash.toString(16).padStart(16, '0')}`;
   const header = block[0].replace(/^(\s*\/\/\s*@match[ \t]+)([^\r\n]+)$/gm, (_, prefix, value) => prefix + unwrap(value.trim()));
   source = source.slice(0, block.index) + header + source.slice(block.index + block[0].length);
-  return {id,name,namespace,version,matches,description:get('description')[0]||'',entries:parseEntries(get('webmcp-entry'),matches),source,enabled:true};
+  return {id,name,namespace,version,matches,description:get('description')[0]||'',updateURL:get('updateURL')[0],downloadURL:get('downloadURL')[0],entries:parseEntries(get('webmcp-entry'),matches),source,enabled:true};
 }
 
 export function prepareImport(source, scripts, replace, expectedSource, expectedEnabled) {
@@ -34,7 +34,7 @@ export function prepareImport(source, scripts, replace, expectedSource, expected
   if (old && expectedSource !== old.source) throw Error('脚本已在其他窗口更新，请重新预览');
   if (old && expectedEnabled !== undefined && old.enabled !== expectedEnabled) throw Error('脚本启停状态已变化，请重新预览');
   if (old && old.source === script.source) throw Error('源码与当前版本一致，无需替换');
-  return {...script, enabled:old?.enabled ?? true, ...(old ? {previousSource:old.source} : {})};
+  return {...script, ...(old?.updates?{updates:old.updates}:{}), enabled:old?.enabled ?? true, ...(old ? {previousSource:old.source} : {})};
 }
 
 

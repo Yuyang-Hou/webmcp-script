@@ -1,3 +1,5 @@
+import {bridgeIdle} from './connection.js';
+import {digest,updateSettings} from './updates.js';
 import {prepareImport,createScriptTemplate} from './metadata.js';
 import {parsePairing,connectionInstructions,connectionChecks,connectionNext} from './connection.js';
 import {$,send,element,discovery,connection,matchesURL,toolSource} from './ui.js';
@@ -22,12 +24,13 @@ function editorState() {
 }
 async function run(action) {message('error');try {await action();}catch(e){message('error',e.message);}}
 function updateStatus(state) {
+  $('connection').dataset.idle=bridgeIdle(state.bridgeStatus);
   $('connection').dataset.connected=state.bridgeStatus==='已连接';
   $('connection-label').textContent=state.bridgeStatus==='已连接'?'已连接':state.bridgeStatus==='连接中…'?'连接中…':state.bridgeStatus==='未配对'?'未连接':'等待桥接';
   $('connection').title=`${connection(state)} · 点击打开连接设置`;
   $('connection').setAttribute('aria-label',`${connection(state)}，打开连接设置`);
   const connected=state.bridgeStatus==='已连接',waiting=state.bridgeStatus==='连接中…',unpaired=state.bridgeStatus==='未配对';
-  $('connection-state').textContent=connected?'浏览器已连接':waiting?'正在连接…':unpaired?'尚未连接':state.bridgeStatus;
+  $('connection-state').textContent=connected?'浏览器已连接':waiting?'正在连接…':unpaired?'尚未连接':bridgeIdle(state.bridgeStatus)?'已就绪':state.bridgeStatus;
   $('connection-state').dataset.connected=connected;
   $('connection-next').textContent=connectionNext(state.bridgeStatus);
   $('permission').textContent=state.userScriptsAvailable?'允许用户脚本 · 已就绪':'尚未允许用户脚本';
@@ -51,13 +54,14 @@ function renderScripts() {
     const enabled=element('td');enabled.append(toggle);
     const name=element('td'), edit=element('button',script.name,'script-name');edit.onclick=()=>run(()=>openDraft(script));
     name.append(edit,element('div',script.id,'script-id'));
+    if(script.updates?.message)name.append(element('div',script.updates.message,'muted'));
     const version=element('td',script.version,'version-cell'), site=element('td',script.matches.join('\n'),'site-cell scope');
     const found=pages.filter(p=>discovery(p).ready&&p.tools.some(t=>t.source?.kind==='script'&&t.source.id===script.id)).length;
     const matched=pages.filter(p=>script.matches.some(pattern=>matchesURL(pattern,p.url)));
     const state=element('td',!script.enabled?'已停用':found?`${found} 个页面发现工具`:matched.length?'等待页面验证':'没有匹配页面','state-cell muted');
     state.title='仅表示当前页面的工具发现结果，不代表已加载最新源码';
-    const actions=element('td'), remove=element('button','卸载','link-button');
-    remove.onclick=()=>run(async()=>{if(!confirm(`卸载“${script.name}”？当前版本和上一版将被删除。`))return;await send({type:'remove',id:script.id});await refresh();message('notice','脚本已卸载。');});actions.append(remove);
+    const actions=element('td'), updates=element('button','更新','link-button'), remove=element('button','卸载','link-button');
+    remove.onclick=()=>run(async()=>{if(!confirm(`卸载“${script.name}”？当前版本和上一版将被删除。`))return;await send({type:'remove',id:script.id});await refresh();message('notice','脚本已卸载。');});updates.onclick=()=>run(()=>openUpdates(script.id));actions.append(updates,remove);
     row.append(enabled,name,version,site,state,actions);$('script-rows').append(row);
   }
 }
@@ -191,4 +195,60 @@ async function init() {
 }
 run(init);
 
-setInterval(async()=>{try{updateStatus(await send({type:'status'}));}catch(e){message('error',e.message);}},3000);
+setInterval(async()=>{try{const state=await send({type:'status'});updateStatus(state);if(JSON.stringify(scripts)!==JSON.stringify(state.scripts)){scripts=state.scripts;renderScripts();}}catch(e){message('error',e.message);}},3000);
+
+let updateScript,updatePreview,updateBusy=false;
+function updateButtons() {
+  if(!updateScript)return;
+  const settings=updateSettings(updateScript),available=!!(settings.updateURL&&settings.downloadURL);
+  $('update-auto-check').disabled=updateBusy||!available;
+  $('update-auto-install').disabled=updateBusy||!available||!$('update-auto-check').checked;
+  $('update-check').disabled=updateBusy||!available;$('update-review').disabled=updateBusy||settings.status!=='available';
+}
+$('update-dialog').addEventListener('cancel',event=>{if(updateBusy)event.preventDefault();});
+async function openUpdates(id) {
+  const state=await send({type:'status'});updateScript=state.scripts.find(s=>s.id===id);
+  if(!updateScript)throw Error('脚本已卸载');
+  const settings=updateSettings(updateScript);
+  $('update-title').textContent=`更新 · ${updateScript.name}`;
+  $('update-auto-check').checked=settings.mode!=='manual';$('update-auto-install').checked=settings.mode==='auto';
+  $('update-source').textContent=settings.updateURL?`更新地址由脚本声明：${settings.updateURL}`:'脚本未声明更新地址，请作者补充 @updateURL / @downloadURL';
+  $('update-summary').textContent=`当前 ${updateScript.version} · 最新 ${settings.latestVersion||'尚未检查'} · 上次检查 ${settings.lastCheck?new Date(settings.lastCheck).toLocaleString():'尚未检查'}`;
+  $('update-message').textContent=[settings.message||'勾选后自动保存；未勾选时仅手动检查',...(settings.reasons||[])].join('；');
+  updateButtons();message('update-error');
+  if(!$('update-dialog').open)$('update-dialog').showModal();
+}
+async function updateAction(action) {
+  updateBusy=true;
+  const buttons=['update-check','update-review','update-close','update-auto-check','update-auto-install'];for(const id of buttons)$(id).disabled=true;
+  message('update-error');
+  try {await action();}catch(error){message('update-error',error.message);}finally{updateBusy=false;for(const id of buttons)$(id).disabled=false;updateButtons();}
+}
+$('update-close').onclick=()=>$('update-dialog').close();
+async function saveUpdateMode() {
+  if(!$('update-auto-check').checked)$('update-auto-install').checked=false;
+  const mode=$('update-auto-install').checked?'auto':$('update-auto-check').checked?'notify':'manual';
+  await updateAction(async()=>{
+    try {await send({type:'update-settings',id:updateScript.id,expectedSha256:await digest(updateScript.source),expectedRevision:updateSettings(updateScript).revision??null,mode});}
+    finally {await openUpdates(updateScript.id);}
+    await refresh();
+  });
+}
+$('update-auto-check').onchange=saveUpdateMode;$('update-auto-install').onchange=saveUpdateMode;
+$('update-check').onclick=()=>updateAction(async()=>{await send({type:'update-check',id:updateScript.id});await openUpdates(updateScript.id);await refresh();});
+$('update-review').onclick=()=>updateAction(async()=>{
+  await openUpdates(updateScript.id);
+  updatePreview=await send({type:'update-preview',id:updateScript.id});
+  $('update-diff').textContent=`版本：${updatePreview.before.version} → ${updatePreview.after.version}\n原网站：${updatePreview.before.matches.join(', ')}\n新网站：${updatePreview.after.matches.join(', ')}\n${updatePreview.reviewReasons.join('；')}`;
+  $('update-old-source').value=updateScript.source;$('update-new-source').value=updatePreview.candidateSource;
+  message('update-commit-error');$('update-commit').disabled=false;$('update-preview-dialog').showModal();
+});
+$('update-cancel').onclick=()=>{$('update-preview-dialog').close();updatePreview=undefined;};
+$('update-commit').onclick=async()=>{
+  if(!updatePreview)return;$('update-commit').disabled=true;$('update-cancel').disabled=true;
+  try {await send({type:'update-commit',token:updatePreview.token});$('update-preview-dialog').close();updatePreview=undefined;await openUpdates(updateScript.id);await refresh();}
+  catch(error){message('update-commit-error',error.message);updatePreview=undefined;}
+  finally{$('update-commit').disabled=!updatePreview;$('update-cancel').disabled=false;}
+};
+
+$('update-preview-dialog').addEventListener('cancel',event=>{if($('update-cancel').disabled)event.preventDefault();else updatePreview=undefined;});

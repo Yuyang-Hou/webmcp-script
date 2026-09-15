@@ -1,6 +1,7 @@
+import {digest,updateURL,updateSettings,inspectUpdate,validateSyntax} from './updates.js';
 import {resolveEntry} from './entries.js';
 import {prepareImport,parseScript} from './metadata.js';
-import {parsePairing} from './connection.js';
+import {parsePairing,bridgeIdle} from './connection.js';
 let socket, connecting = false, bridgeStatus = '未配对', lastError = '', mutation = Promise.resolve();
 const runtimeCode = fetch(chrome.runtime.getURL('runtime.js')).then(r => r.text());
 const settings = async () => ({scripts:[], token:'', port:17891, ...await chrome.storage.local.get(['scripts','token','port'])});
@@ -34,17 +35,17 @@ async function refreshBadge(tabId, loading=false) {
     ]);
   };
   try {
-    if(bridgeStatus!=='已连接')return await paint(bridgeStatus==='连接中…'?'':'!',bridgeStatus==='未配对'?'#986b24':'#b4483c',bridgeStatus);
+    if(bridgeStatus!=='已连接'&&!bridgeIdle(bridgeStatus))return await paint('!',bridgeStatus==='未配对'?'#986b24':'#b4483c',bridgeStatus);
     const tab=await chrome.tabs.get(tabId);
     if(!canScriptURL(tab.url))return await paint('','#737780','此页面不支持读取 WebMCP');
-    await paint('','#737780','本地桥接已连接 · 正在检测页面工具');
+    await paint('','#737780','正在检测页面工具');
     if(loading||tab.status==='loading')return;
     const snapshot=await page(tabId,'inspect');
     if(snapshot.native===false)return await paint('','#737780','浏览器未提供原生 WebMCP 接口');
     if(snapshot.errors?.length)return await paint('!','#b4483c','页面工具异常 · 打开插件查看详情');
     if(snapshot.native!==true||!Array.isArray(snapshot.tools))return await paint('?','#986b24','页面工具尚未就绪');
     const count=snapshot.tools.length;
-    await paint(count>99?'99+':count?String(count):'',count?'#28834d':'#737780',`本地桥接已连接 · 当前页 ${count} 个 WebMCP 工具`);
+    await paint(count>99?'99+':count?String(count):'',count?'#28834d':'#737780',`当前页 ${count} 个 WebMCP 工具`);
   } catch {
     await paint('?','#986b24','无法读取页面工具 · 打开插件查看详情').catch(()=>{});
   }
@@ -72,6 +73,7 @@ async function checkSyntax(script) {
 async function sourceFor(script) {
   return `${await runtimeCode}
 (() => {
+  ${script.activateAfter?`if(performance.timeOrigin < ${script.activateAfter}) return;`:''}
   const runs = globalThis[Symbol.for('webmcp-script.executions')] ||= new Map();
   const id = ${JSON.stringify(script.id)}, source = ${JSON.stringify(script.source)};
   const previous = runs.get(id);
@@ -117,7 +119,7 @@ async function inject(tab, scripts) {
     if (script.enabled) await execute({target:{tabId:tab.id},world:'MAIN',js:[{code}]});
   }
 }
-async function apply(scripts, removed=[]) {
+async function registerScripts(scripts) {
   const user = api();
   const previous = await user.getScripts();
   lastError = '';
@@ -128,6 +130,9 @@ async function apply(scripts, removed=[]) {
     if (previous.length) await user.register(previous);
     throw error;
   }
+}
+async function apply(scripts, removed=[]) {
+  await registerScripts(scripts);
   const tabs = await chrome.tabs.query({});
   await Promise.all(tabs.filter(t=>canScriptURL(t.url)).map(tab=>updatePage(tab.id,async()=>{
       for (const id of removed) {
@@ -148,15 +153,16 @@ async function manageScript(message) {
     const state=await settings(); let scripts=state.scripts, removed=[];
     if(message.type==='import') {
       const script=prepareImport(message.source,scripts,message.replace,message.expectedSource,message.expectedEnabled), old=scripts.find(s=>s.id===script.id);
-      await checkSyntax(script);
+      if(message.defer){validateSyntax(script.source);script.activateAfter=Date.now();}else await checkSyntax(script);
+      if(message.updateState)script.updates=message.updateState;
       if(old) removed.push(old.id);
       scripts=[...scripts.filter(s=>s.id!==script.id),script];
     } else if(message.type==='toggle') { removed=[message.id];scripts=scripts.map(s=>s.id===message.id?{...s,enabled:!!message.enabled}:s); }
     else if(message.type==='remove') {removed=[message.id];scripts=scripts.filter(s=>s.id!==message.id);}
     else throw Error('未知管理操作');
-    await apply(scripts,removed);
+    if(message.defer)await registerScripts(scripts);else await apply(scripts,removed);
     try { await chrome.storage.local.set({scripts}); notify(); } catch(error) {
-      try { await apply(state.scripts,scripts.map(script=>script.id)); }
+      try { if(message.defer)await registerScripts(state.scripts);else await apply(state.scripts,scripts.map(script=>script.id)); }
       catch(rollbackError) { throw Error(`保存失败：${error.message}；自动恢复未完成：${rollbackError.message}。请重试加载以恢复已保存版本。`); }
       const recoveryErrors=[...pageStates.values()].map(state=>state.error).filter(Boolean);
       if(recoveryErrors.length) throw Error(`保存失败：${error.message}；已恢复脚本注册，但部分页面未恢复：${recoveryErrors.join('；')}`);
@@ -164,12 +170,37 @@ async function manageScript(message) {
     }
     return {ok:true};
 }
+async function manageUpdate(method,params,automatic=false) {
+  const state=await settings(),script=state.scripts.find(s=>s.id===params.id);
+  if(!script)throw Error('脚本不存在，请重新读取');
+  const current=updateSettings(script);
+  const persist=async updates=>{script.updates=updates;await chrome.storage.local.set({scripts:state.scripts});notify();return {storage:'connected-chrome-extension',id:script.id,updates};};
+  if(method==='update-settings') {
+    if(!['manual','notify','auto'].includes(params.mode))throw Error('无效更新模式');
+    if(params.expectedSha256!==await digest(script.source)||(params.expectedRevision??null)!==(current.revision??null))throw Error('脚本或更新设置已变化，请重新读取');
+    const check=current.updateURL?updateURL(current.updateURL):'',download=current.downloadURL?updateURL(current.downloadURL):'';
+    if(params.mode!=='manual'&&(!check||!download))throw Error('脚本未声明完整更新地址，请作者补充 @updateURL / @downloadURL');
+    return persist({mode:params.mode,updateURL:check,downloadURL:download,baselineSha256:current.baselineSha256??await digest(script.source),revision:crypto.randomUUID(),status:check?'unchecked':'no-source',message:check?'等待检查更新':'尚未设置更新来源'});
+  }
+  const updates={...current,lastCheck:Date.now(),status:'checking',message:'',reasons:[],latestVersion:undefined};
+  await persist(updates);
+  try {
+    const result=await inspectUpdate(script);
+    const {source,...summary}=result;
+    if(automatic&&current.mode==='auto'&&result.status==='available'&&!result.reasons.length) {
+      const updateState={...updates,...summary,baselineSha256:result.sha256,status:'updated',message:'已自动更新，下次打开或刷新页面时生效'};
+      await manageScript({type:'import',source,replace:script.id,expectedSource:script.source,expectedEnabled:script.enabled,defer:true,updateState});
+      return {storage:'connected-chrome-extension',id:script.id,updates:updateState};
+    }
+    return persist({...updates,...summary});
+  } catch(error) {return persist({...updates,status:'error',message:error.message});}
+}
 const scriptPreviews=new Map();
-const scriptHash=async value=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),b=>b.toString(16).padStart(2,'0')).join('');
+const scriptHash=digest;
 async function scriptSummary(script) {
   if(!script)return null;
   const {id,name,version,matches,description,entries}=parseScript(script.source);
-  return {id,name,version,matches,description,entries,enabled:script.enabled,sha256:await scriptHash(script.source),canRestore:!!script.previousSource};
+  return {id,name,version,matches,description,entries,enabled:script.enabled,sha256:await scriptHash(script.source),canRestore:!!script.previousSource,updates:updateSettings(script)};
 }
 async function manageBrowserScript(method,params) {
   const {scripts}=await settings();
@@ -185,7 +216,7 @@ async function manageBrowserScript(method,params) {
   }
   if(method==='script-preview') {
     const {action}=params;
-    if(!['import','enable','disable','remove','restore'].includes(action))throw Error('未知脚本管理操作');
+    if(!['import','enable','disable','remove','restore','update'].includes(action))throw Error('未知脚本管理操作');
     if(action!=='import'&&(typeof params.id!=='string'||!params.id))throw Error('需要脚本 ID');
     const parsed=action==='import'?parseScript(params.source):null;
     if(parsed&&params.id!==undefined&&params.id!==parsed.id)throw Error('脚本 ID 与源码不一致');
@@ -193,11 +224,14 @@ async function manageBrowserScript(method,params) {
     if(!parsed&&!old)throw Error('脚本不存在，请查询 browser_catalog');
     if((action==='enable'&&old.enabled)||(action==='disable'&&!old.enabled))throw Error('脚本已处于目标启停状态，无需修改');
     let next,message;
-    if(action==='import'||action==='restore') {
-      const source=parsed?.source??old.previousSource;
+    let remote;
+    if(action==='update'){remote=await inspectUpdate(old);if(remote.status!=='available')throw Error(remote.message);}
+    if(action==='import'||action==='restore'||action==='update') {
+      const source=remote?.source??parsed?.source??old.previousSource;
       if(source===undefined)throw Error('没有可恢复的上一版');
       next=prepareImport(source,scripts,old?.id,old?.source,old?.enabled);
-      message={type:'import',source:next.source,replace:old?.id,expectedSource:old?.source,expectedEnabled:old?.enabled};
+      message={type:'import',source:next.source,replace:old?.id,expectedSource:old?.source,expectedEnabled:old?.enabled,...(remote?{defer:true,updateState:{...updateSettings(old),baselineSha256:remote.sha256,status:'updated',lastCheck:Date.now(),latestVersion:remote.latestVersion,reasons:[],message:'已更新，下次打开或刷新页面时生效'}}:{})};
+      if(remote)next.updates=message.updateState;
     } else if(action==='remove')message={type:'remove',id:old.id};
     else {next={...old,enabled:action==='enable'};message={type:'toggle',id:old.id,enabled:next.enabled};}
     const now=Date.now();
@@ -205,7 +239,9 @@ async function manageBrowserScript(method,params) {
     if(scriptPreviews.size>=20)throw Error('待提交预览过多，请完成已有预览或等待五分钟后重试');
     const token=crypto.randomUUID(),expiresAt=now+300000;
     scriptPreviews.set(token,{message,fingerprint:await scriptHash(JSON.stringify(scripts)),expiresAt,id:next?.id??old.id});
-    return {storage:'connected-chrome-extension',token,expiresAt,action,before:await scriptSummary(old),after:await scriptSummary(next),effect:action==='remove'?'卸载并删除当前和上一版源码；不会撤销已经发生的网站操作。':'保存后应用到匹配网页；启用脚本会执行源码，普通脚本更新或重新启用后可能需要刷新页面。',pageVerification:'提交后需重新发现页面工具；预览不会执行脚本。'};
+    const result={storage:'connected-chrome-extension',token,expiresAt,action,...(remote?{candidateSource:remote.source}:{}),reviewReasons:remote?.reasons??[],before:await scriptSummary(old),after:await scriptSummary(next),effect:remote?'下载的新版本保存后在下次打开或刷新页面时执行；本地修改会被替换。':action==='remove'?'卸载并删除当前和上一版源码；不会撤销已经发生的网站操作。':'保存后应用到匹配网页；启用脚本会执行源码，普通脚本更新或重新启用后可能需要刷新页面。',pageVerification:'提交后需重新发现页面工具；预览不会执行脚本。'};
+    if(new TextEncoder().encode(JSON.stringify(result)).byteLength>1800000){scriptPreviews.delete(token);throw Error('更新预览过大，请手动下载审阅后导入');}
+    return result;
   }
   if(method==='script-commit') {
     if(typeof params.token!=='string')throw Error('需要预览 token');
@@ -220,8 +256,8 @@ async function manageBrowserScript(method,params) {
   throw Error('未知脚本管理操作');
 }
 async function dispatch(method,params={}) {
-  if(['script-get','script-preview','script-commit'].includes(method)) {
-    mutation=mutation.catch(()=>{}).then(()=>manageBrowserScript(method,params));
+  if(['script-get','script-preview','script-commit','update-settings','update-check'].includes(method)) {
+    mutation=mutation.catch(()=>{}).then(()=>method.startsWith('update-')?manageUpdate(method,params):manageBrowserScript(method,params));
     return mutation;
   }
   if (method === 'catalog') {
@@ -303,7 +339,18 @@ async function connect() {
   };
 }
 chrome.alarms.create('reconnect',{periodInMinutes:0.5});
-chrome.alarms.onAlarm.addListener(connect);
+chrome.alarms.onAlarm.addListener(alarm=>{
+  if(alarm.name==='reconnect')void connect();
+  if(alarm.name==='script-updates') {
+    mutation=mutation.catch(()=>{}).then(async()=>{
+      const {scripts}=await settings();
+      // ponytail: one due script per tick bounds work; batch only if large libraries need faster catch-up.
+      const due=scripts.find(s=>updateSettings(s).mode!=='manual'&&Date.now()-(updateSettings(s).lastCheck??0)>=86400000);
+      if(due)await manageUpdate('update-check',{id:due.id},true);
+    }).catch(error=>{lastError=error.message;});
+  }
+});
+void chrome.alarms.get('script-updates').then(alarm=>{if(!alarm)return chrome.alarms.create('script-updates',{periodInMinutes:5});}).catch(error=>{lastError=error.message;});
 chrome.tabs.onRemoved.addListener(id=>{badgeRequests.delete(id);pageStates.delete(id);notify();});
 chrome.tabs.onActivated.addListener(({tabId})=>{void refreshBadge(tabId);});
 chrome.tabs.onUpdated.addListener((id,change)=>{if(change.url || change.status==='loading')pageStates.delete(id);if(change.url || change.status) {notify();void refreshBadge(id,change.status==='loading');}});
@@ -321,6 +368,9 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   if(!sender.url?.startsWith(chrome.runtime.getURL(''))) return;
   const action=async()=>{
     if(message.type==='status') {let available=true,permissionError='';try {await api().getScripts();} catch(e) {available=false;permissionError=e.message;} return {...await settings(),bridgeStatus,lastError:permissionError||lastError,userScriptsAvailable:available};}
+    if(message.type==='update-settings'||message.type==='update-check')return manageUpdate(message.type,message);
+    if(message.type==='update-preview')return manageBrowserScript('script-preview',{id:message.id,action:'update'});
+    if(message.type==='update-commit')return manageBrowserScript('script-commit',{token:message.token});
     if(message.type==='pages') return dispatch('pages');
     if(message.type==='inspect') return dispatch('inspect',{pageId:message.pageId});
     if(message.type==='pair') {const {token,port}=parsePairing(message.token,message.port??17891);await chrome.storage.local.set({token,port});socket?.close();socket=undefined;connecting=false;await connect();return {ok:true};}

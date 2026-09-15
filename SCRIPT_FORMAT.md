@@ -82,3 +82,13 @@ document.modelContext.registerTool({
 制作时从真实页面链接或已部署路由源码验证模板，并保存脱敏证据。安装预览展示模板和参数，修改同 ID 脚本时保留启停状态及上一版。AI 使用 `browser_catalog` 查找 entries，再调用 `browser_resolve_entry`，携带脚本 ID、版本、入口 ID 和明确参数，获得精确地址供 `visit_page` 打开。解析不读取页面、不执行脚本、不证明项目存在或用户有权限，也不授予网站操作权限；页面工具仍需原生发现。
 
 验收须在相关页面关闭时完成“目录 → 参数解析 → 直接打开 → 原生工具发现 → 授权的只读调用”，不借助菜单点击或测试人员手写目标地址。
+
+### 可选更新来源
+
+```javascript
+// @version 1.2.0
+// @updateURL https://scripts.example.com/read.meta.js
+// @downloadURL https://scripts.example.com/read.user.js
+```
+
+元数据文件需包含同一脚本的完整 UserScript 元数据头，下载文件为完整源码；两个字段也可指向同一 `.user.js`。地址必须可匿名直接获取，不能依赖站点登录 Cookie。未声明地址的本地脚本需由作者补充头部后才能检查更新。用户仅勾选自动检查及自动安装，无需输入 URL。声明来源不自动启用更新；`@updateURL none` 禁用默认来源。版本支持数字点分及 SemVer 预发布格式，发布源码变化需递增版本。详见 [更新流程与保护](docs/ai-script-management.md#检查与自动更新)。

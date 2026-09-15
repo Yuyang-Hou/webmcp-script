@@ -402,3 +402,45 @@ The extension SHALL preserve pairing on connection loss and distinguish unpaired
 - **WHEN** the bridge becomes unavailable after pairing
 - **THEN** the UI explains automatic retry and asks AI to start the bridge and verify pages before requesting a new pairing code
 - **AND** retry retains the waiting state until connected and does not discard the saved token
+
+### Requirement: User-controlled script update sources
+Installed scripts SHALL support author-maintained HTTPS updateURL/downloadURL metadata as the only source of URLs and per-script manual, daily-check-only and daily-auto-install modes. No script marketplace or account service SHALL be required. Without explicit automatic opt-in, scripts SHALL remain manual. The manager and MCP SHALL expose current and latest versions, last check, source URLs, policy and actionable failure/conflict status.
+
+#### Scenario: Check and review an update
+- **WHEN** the user or AI checks a configured source
+- **THEN** the extension fetches bounded UTF-8 metadata/source without cookies, referrer or code execution, validates identity, numeric dotted/SemVer prerelease ordering and syntax, and preserves installed source
+- **AND** login HTML, non-HTTPS or credential-bearing URLs, cross-origin redirects, oversized responses, unsupported versions and metadata/source disagreement are rejected explicitly
+- **WHEN** a newer version is reviewed and committed
+- **THEN** the preview includes the exact candidate source and scope changes, is single-use and bound to installed state, and the saved revision retains enabled state and one previous version
+- **AND** equal-version changes and downgrades are never automatically installed
+
+#### Scenario: Autonomous checking and conflict protection
+- **WHEN** Chrome is running, a saved automatic policy is due and no MCP client or website tab is open
+- **THEN** a recreated-if-missing Chrome alarm checks at most one due script each five minutes, with a persisted 24-hour check interval
+- **AND** check-only mode reports new versions without installing; auto mode installs only if the local baseline, website scope and declared source URLs remain unchanged
+- **AND** local modifications, absent baselines and scope/source changes require a new reviewed commit, while registration or storage failures preserve the saved version and attempt registry rollback
+- **AND** changing policy uses expected source and policy revision to reject stale writes
+
+#### Scenario: Existing documents retain their revision
+- **WHEN** an update is saved manually or automatically from a remote source
+- **THEN** it is registered for future documents without injecting or refreshing current pages
+- **AND** route maintenance, worker restarts and unrelated registry operations cannot execute that downloaded revision in a document created before the update
+- **AND** only a subsequent page open or full refresh can activate it; storage success is not evidence of page-tool acceptance
+
+
+#### Scenario: Checkbox-only update preferences
+- **WHEN** a user opens a script update dialog
+- **THEN** source URLs are read-only metadata and only automatic checking and dependent automatic installation checkboxes configure policy
+- **AND** checkbox changes save immediately, failed saves restore persisted values, and disabling checking also disables installation
+- **AND** missing metadata disables automatic preferences and directs the author to update the script header
+- **AND** MCP accepts policy only, legacy stored URL overrides do not override metadata, and source changes pause automatic mode while preserving local-edit protection
+
+
+### Requirement: Quiet bridge standby
+Normal paired standby and reconnecting states SHALL NOT be presented as connection faults.
+
+#### Scenario: AI exits and starts again
+- **WHEN** the paired bridge exits while idle or waits for AI to reconnect
+- **THEN** the toolbar badge reflects actual page tools without a connection warning, the manager hides standby status text, and the popup keeps a quiet settings link in its footer
+- **AND** the connection details explain readiness without asking the user to reconnect
+- **AND** unpaired setup, invalid configuration and actual page errors remain actionable and visible

@@ -19,7 +19,7 @@ await mkdir(dist, { recursive:true });
 for (const folder of ['extension','examples']) await cp(new URL(folder,root),new URL(folder+'/',dist),{recursive:true});
 // Local build paths only; pairing secrets are never packaged into the extension.
 await writeFile(new URL('extension/connection-config.json',dist),JSON.stringify({mcpServers:{'webmcp-script':{command:process.execPath,args:[fileURLToPath(new URL('bridge/server.mjs',root))]}}},null,2)+'\n');
-const editorBuild=await build({metafile:true,entryPoints:[fileURLToPath(new URL('extension/editor.js',root))],outfile:fileURLToPath(new URL('extension/editor.js',dist)),bundle:true,format:'esm',minify:true,legalComments:'linked'});
+const editorBuild=await build({metafile:true,entryPoints:['editor.js','updates.js'].map(name=>fileURLToPath(new URL('extension/'+name,root))),outdir:fileURLToPath(new URL('extension/',dist)),bundle:true,format:'esm',minify:true,legalComments:'linked'});
 const licenses=new Map();
 for(const input of Object.keys(editorBuild.metafile.inputs).filter(path=>path.includes('node_modules/'))) {
   let dir=dirname(resolve(input));

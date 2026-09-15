@@ -1,3 +1,4 @@
+import {bridgeIdle} from './connection.js';
 import {$,send,element,discovery,matchesURL,toolSource,icon} from './ui.js';
 for(const node of document.querySelectorAll('[data-icon]'))node.replaceWith(icon(node.dataset.icon));
 async function open(hash) {try{await chrome.tabs.create({url:chrome.runtime.getURL('manager.html#'+hash)});window.close();}catch(e){error(e);}}
@@ -6,12 +7,12 @@ $('manage').onclick=()=>open('scripts');$('new-script').onclick=()=>open('new');
 async function render(){
   $('error').textContent='';$('error').hidden=true;
   const [state,tabs]=await Promise.all([send({type:'status'}),chrome.tabs.query({active:true,currentWindow:true})]);
-  const connected=state.bridgeStatus==='已连接';
+  const connected=state.bridgeStatus==='已连接',idle=bridgeIdle(state.bridgeStatus);
   $('connection').textContent=connected?'已连接':state.bridgeStatus==='连接中…'?'正在连接…':state.bridgeStatus==='未配对'?'未连接':'等待桥接';
   $('connection-mark').replaceChildren(icon(connected?'check':'link'));
-  $('connect').dataset.connected=connected;
-  $('connect').title=connected?'本机桥接已连接 · 点击打开连接设置':`${state.bridgeStatus} · 点击打开连接设置`;
-  if(connected){$('popup-footer').append($('connect'));$('connect').setAttribute('aria-label','已连接，打开连接设置');}
+  $('connect').dataset.connected=connected; $('connect').dataset.idle=idle;
+  $('connect').title=connected?'本机桥接已连接 · 点击打开连接设置':idle?'连接设置':`${state.bridgeStatus} · 点击打开连接设置`;
+  if(connected||idle){$('popup-footer').append($('connect'));$('connect').setAttribute('aria-label',idle?'打开连接设置':'已连接，打开连接设置');}
   else{$('tools').before($('connect'));$('connect').setAttribute('aria-label',`${$('connection').textContent}，打开连接设置`);}
   const tab=tabs[0];
   const expanded=new Set([...$('scripts').querySelectorAll('details[open]')].map(node=>node.dataset.id));
