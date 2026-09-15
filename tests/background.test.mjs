@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {prepareImport} from '../extension/metadata.js';
+import {prepareImport,parseScript} from '../extension/metadata.js';
+import {resolveEntry} from '../extension/entries.js';
 import {parsePairing} from '../extension/connection.js';
 const sockets=[];
 class WebSocket {
@@ -15,6 +16,8 @@ const listener={addListener(){}};
 const badges=new Map(),titles=new Map();
 const context=vm.createContext({WebSocket,URL,setTimeout(){},fetch:async()=>({text:async()=>''}),chrome:{action:{setBadgeText:async({tabId,text})=>badges.set(tabId,text),setBadgeBackgroundColor:async()=>{},setBadgeTextColor:async()=>{},setTitle:async({tabId,title})=>titles.set(tabId,title)},storage:{local:{get:async()=>({scripts:storedScripts,token:'test-token'})}},runtime:{getURL:p=>'chrome-extension://test/'+p,onInstalled:listener,onMessage:{addListener(handler){onMessage=handler;}}},alarms:{create(){},onAlarm:listener},tabs:{query:async()=>[],onRemoved:{addListener(handler){onRemoved=handler;}},onUpdated:{addListener(handler){onUpdated=handler;}},onActivated:{addListener(handler){onActivated=handler;}},sendMessage:()=>new Promise(r=>release=r)},webNavigation:{onHistoryStateUpdated:{addListener(handler){onHistory=handler;}}}}});
 context.parsePairing=parsePairing;
+context.parseScript=parseScript;
+context.resolveEntry=resolveEntry;
 const source=fs.readFileSync(new URL('../extension/background.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'');
 vm.runInContext(source,context);
 await new Promise(setImmediate);
@@ -29,6 +32,14 @@ assert.equal(sockets[1].sent[0].type,'hello');
 assert.equal(sockets[0].sent.length,1);
 sockets[0].onclose();
 assert.equal(vm.runInContext('bridgeStatus',context),'已连接');
+
+await vm.runInContext('socket.close()',context);
+assert.equal(vm.runInContext('bridgeStatus',context),'等待本机桥接，自动重连中');
+await vm.runInContext('connect()',context);
+assert.equal(vm.runInContext('bridgeStatus',context),'等待本机桥接，自动重连中');
+sockets.at(-1).open();
+assert.equal(vm.runInContext('bridgeStatus',context),'已连接');
+
 const response=await new Promise(resolve=>{assert.equal(onMessage({type:'status'},{url:'chrome-extension://test/manager.html',tab:{id:3}},resolve),true);});
 assert.ok(response.result);
 context.chrome.tabs.query=async()=>[{id:1,url:'http://localhost/'}];
@@ -159,3 +170,31 @@ context.chrome.tabs.get=async id=>({id,url:'chrome://newtab/'});
 await vm.runInContext('refreshBadge(7)',context);assert.equal(badges.get(7),'');
 onRemoved(7);assert.equal(vm.runInContext('badgeRequests.has(7)',context),false);
 console.log('badges: native counts, per-tab updates, failures, reconnect and stale navigation results checked');
+
+// Installed Chrome scripts are discoverable without open pages; metadata never exposes source or pairing data.
+let entries=[];
+storedScripts=[{...prepareImport(scriptSource('catalog').replace('// @name Example','// @name Console\n// @description WebApp 发布'),[]),enabled:false}];
+context.chrome.storage.local.get=async()=>({scripts:storedScripts,entries,token:'private-token'});
+context.chrome.storage.local.set=async value=>{entries=value.entries;};
+context.chrome.tabs.query=async()=>[];
+let catalog=await vm.runInContext("dispatch('catalog',{query:'webapp'})",context);
+assert.equal(catalog.scripts[0].enabled,false);assert.equal(catalog.scripts[0].description,'WebApp 发布');
+assert(!JSON.stringify(catalog).includes('source'));assert(!JSON.stringify(catalog).includes('private-token'));
+context.chrome.tabs.get=async()=>({url:'https://console.example.com/#/project/test'});
+const save={action:'save',name:'deal 测试',pageId:7,url:'https://console.example.com/#/project/test',expectedUrl:null};
+await vm.runInContext(`dispatch('entry',${JSON.stringify(save)})`,context);
+catalog=await vm.runInContext("dispatch('catalog',{query:'deal'})",context);
+assert.equal(catalog.entries[0].url,save.url);
+await assert.rejects(vm.runInContext(`dispatch('entry',${JSON.stringify(save)})`,context),/入口已变化/);
+await assert.rejects(vm.runInContext(`dispatch('entry',${JSON.stringify({...save,name:'race',url:'https://other.example.com/'})})`,context),/页面地址已变化/);
+for(const url of ['javascript:alert(1)','https://user:secret@example.com/','https://chromewebstore.google.com/']) {
+  context.chrome.tabs.get=async()=>({url});
+  await assert.rejects(vm.runInContext(`dispatch('entry',${JSON.stringify({...save,name:'invalid',url})})`,context),/普通 HTTP/);
+}
+context.chrome.storage.local.set=async()=>{throw Error('quota');};
+await assert.rejects(vm.runInContext(`dispatch('entry',${JSON.stringify({action:'remove',name:save.name,expectedUrl:save.url})})`,context),/quota/);
+assert.equal(entries.length,1);
+context.chrome.storage.local.set=async value=>{entries=value.entries;};
+await vm.runInContext(`dispatch('entry',${JSON.stringify({action:'remove',name:save.name,expectedUrl:save.url})})`,context);
+assert.equal(entries.length,0);
+console.log('catalog: closed-page discovery, disabled scripts, private data exclusion, persisted entries, stale writes and URL validation checked');

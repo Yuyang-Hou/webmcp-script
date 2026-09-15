@@ -1,4 +1,5 @@
-import {prepareImport} from './metadata.js';
+import {resolveEntry} from './entries.js';
+import {prepareImport,parseScript} from './metadata.js';
 import {parsePairing} from './connection.js';
 let socket, connecting = false, bridgeStatus = '未配对', lastError = '', mutation = Promise.resolve();
 const runtimeCode = fetch(chrome.runtime.getURL('runtime.js')).then(r => r.text());
@@ -144,6 +145,47 @@ async function apply(scripts, removed=[]) {
   void refreshBadges();
 }
 async function dispatch(method,params={}) {
+  if (method === 'catalog') {
+    if(params.query!==undefined&&(typeof params.query!=='string'||params.query.length>200))throw Error('无效搜索词');
+    const {scripts}=await settings(), {entries=[]}=await chrome.storage.local.get('entries');
+    const query=(params.query||'').toLowerCase();
+    const matches=value=>JSON.stringify(value).toLowerCase().includes(query);
+    return {storage:'connected-chrome-extension',scripts:scripts.map(script=>{
+      const {id,name,version,matches,description,entries}=parseScript(script.source);
+      return {id,name,version,matches,description,entries,enabled:script.enabled};
+    }).filter(matches),entries:entries.filter(matches),nextStep:'使用 pages 或 visit_page 打开已确认的入口，再发现原生工具；安装清单不代表页面工具已就绪。'};
+  }
+  if (method === 'resolve-entry') {
+    const stored=(await settings()).scripts.find(script=>script.id===params.scriptId);
+    if(!stored)throw Error('脚本未安装，请重新查询 browser_catalog');
+    const script={...parseScript(stored.source),enabled:stored.enabled};
+    if(params.expectedVersion!==script.version)throw Error('脚本版本已变化，请重新查询 browser_catalog');
+    return resolveEntry(script,params.entryId,params.parameters??{});
+  }
+  if (method === 'entry') {
+    const action=async()=>{
+      if(!['save','remove'].includes(params.action)||typeof params.name!=='string'||!params.name.trim()||params.name.length>160)throw Error('无效入口操作或名称');
+      const name=params.name.trim(), {entries=[]}=await chrome.storage.local.get('entries');
+      const old=entries.find(entry=>entry.name===name);
+      if(params.expectedUrl!==(old?.url??null))throw Error('入口已变化，请重新读取 browser_catalog');
+      let entry;
+      if(params.action==='save') {
+        if(!Number.isInteger(params.pageId)||params.pageId<=0)throw Error('保存入口需要已确认页面的 pageId');
+        const tab=await chrome.tabs.get(params.pageId);
+        if(params.url!==tab.url)throw Error('页面地址已变化，请重新读取 pages 并确认入口');
+        const url=new URL(tab.url);
+        if(!canScriptURL(url.href)||url.username||url.password)throw Error('入口必须是无登录凭据的普通 HTTP(S) 页面');
+        entry={name,url:url.href};
+      }
+      const next=entries.filter(item=>item.name!==name);
+      if(entry)next.push(entry);
+      if(next.length>500)throw Error('入口数量已达 500 个，请先移除不用的入口');
+      await chrome.storage.local.set({entries:next});notify();
+      return {entry:entry??null,removed:!entry};
+    };
+    mutation=mutation.catch(()=>{}).then(action);
+    return mutation;
+  }
   if (method === 'pages') {
     const tabs = (await chrome.tabs.query({})).filter(t=>/^https?:/.test(t.url||''));
     return {pages:await Promise.all(tabs.map(async t=> {try {
@@ -168,12 +210,12 @@ async function connect() {
   const port=Number(storedPort);
   if(!Number.isInteger(port)||port<1||port>65535) {setBridgeStatus('本地端口无效，请重新配对');connecting=false;return;}
   if (!token) {setBridgeStatus('未配对');connecting=false;return;}
-  setBridgeStatus('连接中…');
+  if(bridgeStatus!=='等待本机桥接，自动重连中')setBridgeStatus('连接中…');
   const ws=new WebSocket(`ws://127.0.0.1:${port}/extension?token=${encodeURIComponent(token)}`);
   socket=ws;
   ws.onopen=()=>{if(socket!==ws)return;connecting=false;setBridgeStatus('已连接');ws.send(JSON.stringify({type:'hello',version:'0.4.0-beta.2'}));};
-  ws.onclose=()=>{if(socket!==ws)return;connecting=false;setBridgeStatus('连接断开，自动重连中');setTimeout(connect,3000);};
-  ws.onerror=()=>{if(socket===ws)setBridgeStatus('本地桥接连接失败');};
+  ws.onclose=()=>{if(socket!==ws)return;connecting=false;setBridgeStatus('等待本机桥接，自动重连中');setTimeout(connect,3000);};
+  ws.onerror=()=>{if(socket===ws)setBridgeStatus('等待本机桥接，自动重连中');};
   ws.onmessage=async event=> {
     let message;
     try { message=JSON.parse(event.data); if(message.type==='ping') {if(ws.readyState===1)ws.send(JSON.stringify({type:'pong'}));return;} if(!message.id || !message.method) return;
@@ -214,7 +256,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
     else if(message.type==='remove') {removed=[message.id];scripts=scripts.filter(s=>s.id!==message.id);}
     else throw Error('未知管理操作');
     await apply(scripts,removed);
-    try { await chrome.storage.local.set({scripts}); } catch(error) {
+    try { await chrome.storage.local.set({scripts}); notify(); } catch(error) {
       try { await apply(state.scripts,scripts.map(script=>script.id)); }
       catch(rollbackError) { throw Error(`保存失败：${error.message}；自动恢复未完成：${rollbackError.message}。请重试加载以恢复已保存版本。`); }
       const recoveryErrors=[...pageStates.values()].map(state=>state.error).filter(Boolean);

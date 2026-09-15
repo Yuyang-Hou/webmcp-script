@@ -64,9 +64,9 @@ try{
   assert.equal(await page.locator('#new-script').evaluate(el=>getComputedStyle(el).borderTopWidth),'0px');
   assert.equal(await page.locator('#new-script').evaluate(el=>getComputedStyle(el,'::after').backgroundColor),'rgba(0, 0, 0, 0)');
   assert.equal(await page.locator('.tab-rail>a[aria-current=page]').evaluate(el=>getComputedStyle(el,'::after').backgroundColor),'rgb(78, 83, 91)');
-  await page.evaluate(()=>fixture.bridgeStatus='连接断开，自动重连中');
-  await page.locator('#connection-label').filter({hasText:'未连接'}).waitFor();
-  assert((await page.locator('#connection').getAttribute('title')).includes('连接断开'));
+  await page.evaluate(()=>fixture.bridgeStatus='等待本机桥接，自动重连中');
+  await page.locator('#connection-label').filter({hasText:'等待桥接'}).waitFor();
+  assert((await page.locator('#connection').getAttribute('title')).includes('等待本机桥接'));
   await page.locator('.app-header').screenshot({path:resolve(evidence,'单行顶栏-未连接.png')});
   await page.evaluate(()=>fixture.bridgeStatus='已连接');await page.locator('#connection-label').waitFor({state:'hidden'});
   await page.locator('.app-header').screenshot({path:resolve(evidence,'单行顶栏-已连接.png')});
@@ -165,8 +165,8 @@ try{
   assert(await popup.locator('#tools').evaluate(el=>el.getBoundingClientRect().top<document.querySelector('#scripts').getBoundingClientRect().top));
   assert.equal(await popup.locator('#connect').evaluate(el=>el.parentElement.id),'popup-footer');
   await popup.locator('#tools summary').click();assert(await popup.getByText('website_search',{exact:true}).isHidden());await popup.locator('#tools summary').click();
-  await popup.evaluate(()=>fixture.bridgeStatus='连接断开，自动重连中');await popup.getByRole('checkbox').uncheck();
-  assert.equal(await popup.locator('#connection').innerText(),'未连接');assert((await popup.locator('#connect').getAttribute('title')).includes('连接断开'));
+  await popup.evaluate(()=>fixture.bridgeStatus='等待本机桥接，自动重连中');await popup.getByRole('checkbox').uncheck();
+  assert.equal(await popup.locator('#connection').innerText(),'等待桥接');assert((await popup.locator('#connect').getAttribute('title')).includes('等待本机桥接'));
   assert.equal(await popup.locator('#connect').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(233, 240, 250)');
   assert(await popup.locator('#connect').evaluate(el=>el.getBoundingClientRect().top<document.querySelector('#tools').getBoundingClientRect().top));
   await popup.locator('body').screenshot({path:resolve(evidence,'弹窗未连接.png')});

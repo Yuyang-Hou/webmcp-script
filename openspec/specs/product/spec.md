@@ -5,6 +5,27 @@
 
 ## Requirements
 
+### Requirement: Browser installation and entry discovery
+The MCP SHALL expose a searchable catalog sourced directly from the connected Chrome extension's installed scripts and persisted named entry URLs, without requiring open website pages or per-install memory edits. This catalog SHALL NOT replace native tool discovery or the separate CLI library.
+
+#### Scenario: Installed script with no open page
+- **WHEN** AI searches the browser catalog after installation or update
+- **THEN** it receives the current script name, description, version, matches and enabled state, including disabled scripts
+- **AND** no script source, previous source or pairing secret is returned
+- **AND** metadata does not claim native tools are ready or grant authorization
+
+#### Scenario: Reusable confirmed project entry
+- **WHEN** AI saves a confirmed project/environment name with an observed page ID and exact URL
+- **THEN** the extension persists it locally and later catalog queries return it even after the page closes
+- **AND** navigation since observation, stale expected URLs, invalid names, non-HTTP(S) URLs and embedded login credentials reject the save
+- **AND** entry writes are serialized, storage failure preserves the prior entry, and removal uses the same stale-write check
+- **AND** the operation does not install scripts, open pages or invoke website tools
+
+#### Scenario: Compatibility boundary
+- **WHEN** an old extension or MCP lacks catalog support
+- **THEN** guidance requires updating both components instead of treating the failure as an empty installation list
+- **AND** automatic website-code drift detection is not claimed by the installation catalog
+
 ### Requirement: Maintained WebMCP Script skill
 The repository SHALL maintain the companion skill as skills/webmcp-script with the display name WebMCP Script and invocation name webmcp-script, replacing the former web-code name.
 
@@ -323,3 +344,32 @@ The project SHALL publish a prebuilt developer beta with truthful compatibility 
 - **WHEN** the user requests connection checks
 - **THEN** the UI reports userScripts permission, local relay state and native page discovery separately, with recovery guidance, without invoking website tools or claiming that AI-side verification passed
 - **AND** release acceptance unpacks the actual ZIP outside the source tree and validates its hashes, MCP pairing and CLI without node_modules; a mock extension response is labeled as a transport check
+
+### Requirement: Script-owned parameterized entry points
+Installed userscripts SHALL optionally declare validated single-line JSON webmcp-entry metadata. New authoring guidance SHALL require evidence-grounded entry points for navigable capabilities, so AI can resolve the first visit without a manual bookmark or menu navigation.
+
+#### Scenario: Closed-page direct discovery
+- **WHEN** AI queries an installed script with no matching open page
+- **THEN** the catalog returns its entry templates and parameter descriptions
+- **AND** browser_resolve_entry returns an exact URL from explicit parameters without opening pages, invoking script code or making website requests
+- **AND** visit_page and native tool discovery remain the execution path, with no replacement registry or automatic business mutation
+
+#### Scenario: Invalid or stale declaration
+- **WHEN** a declaration has dynamic authority, credentials, unmatched parameters, duplicate IDs or an example outside the script match scope
+- **THEN** import rejects it before changing the installed script
+- **WHEN** resolution supplies missing or extra parameters, invalid identifier values, a disabled script or a stale version
+- **THEN** it rejects instead of guessing defaults or navigating
+- **AND** legacy scripts without entries remain installable, with an empty entry list
+
+#### Scenario: Author and installer contract
+- **WHEN** a script is created or updated
+- **THEN** the template, skill and format documentation explain entry declarations and installation preview shows their URLs and parameters
+- **AND** browser acceptance closes the website page before catalog lookup and parameter resolution, then directly opens the result and validates a read-only native tool without clicking site menus
+
+### Requirement: Honest reconnect guidance
+The extension SHALL preserve pairing on connection loss and distinguish unpaired, connecting, waiting for bridge and connected states without interpreting a WebSocket failure as invalid credentials.
+
+#### Scenario: Idle bridge restarts
+- **WHEN** the bridge becomes unavailable after pairing
+- **THEN** the UI explains automatic retry and asks AI to start the bridge and verify pages before requesting a new pairing code
+- **AND** retry retains the waiting state until connected and does not discard the saved token
