@@ -15,21 +15,29 @@ test('standard MCP discovery, authentication, invocation and disconnect', async 
   try {
     await client.connect(transport);
     const tools=(await client.listTools()).tools;
-    assert.deepEqual(tools.map(x=>x.name).sort(),['browser_catalog','browser_entry','browser_resolve_entry','call_tool','connection_info','describe_tool','inspect_page','native_build','native_launch','native_select_build','pages','script_change','script_import','script_library_status','script_preview','visit_page']);
+    assert.deepEqual(tools.map(x=>x.name).sort(),['browser_catalog','browser_entry','browser_resolve_entry','browser_script_commit','browser_script_get','browser_script_preview','call_tool','connection_info','describe_tool','inspect_page','native_build','native_launch','native_select_build','pages','script_change','script_import','script_library_status','script_preview','visit_page']);
     const setup=await client.callTool({name:'connection_info',arguments:{}});
     assert(!setup.isError);
     assert.deepEqual(JSON.parse(JSON.parse(setup.content[0].text).pairingCode),{version:1,token,port});
-    assert.equal((await client.callTool({name:'pages',arguments:{}})).isError,true);
+    const unavailable=await client.callTool({name:'pages',arguments:{}});
+    assert.equal(unavailable.isError,true);
+    assert.match(unavailable.content[0].text,/request was not sent/);
+    const first=client.callTool({name:'pages',arguments:{}});
+    await new Promise(resolve=>setTimeout(resolve,100));
     const bad = new WebSocket(`ws://127.0.0.1:${port}/extension?token=${token}`, {origin:'https://malicious.example'});
     await assert.rejects(once(bad,'open'));
     ws=new WebSocket(`ws://127.0.0.1:${port}/extension?token=${token}`, {origin:'chrome-extension://'+'a'.repeat(32)});
     await once(ws,'open');
+    let pageRequests=0;
     ws.on('message',raw=>{
       const req=JSON.parse(raw);
+      if(req.method==='pages')pageRequests++;
       if(req.method==='pages') ws.send(JSON.stringify({id:req.id,result:{method:'pages',pages:[{native:false,tools:[],errors:[]},{native:true,tools:[{name:'legacy'}],errors:[]},{native:true,implementation:'native-0.4',tools:[{name:'website_native'}],errors:[]}]}}));
       else if(req.method==='describe' && req.params.revision!=='r1') ws.send(JSON.stringify({id:req.id,error:{message:'STALE_REVISION'}}));
       else ws.send(JSON.stringify({id:req.id,result:{method:req.method,params:req.params,revision:'r1',tools:[{name:'read',description:'local only'}]}}));
     });
+    assert.equal((await first).isError,undefined);
+    assert.equal(pageRequests,1,'expired request is not sent after reconnect');
     const catalog=await client.callTool({name:'browser_catalog',arguments:{query:'console'}});
     assert.equal(JSON.parse(catalog.content[0].text).method,'catalog');
     assert.equal(JSON.parse(catalog.content[0].text).params.query,'console');
@@ -47,6 +55,19 @@ test('standard MCP discovery, authentication, invocation and disconnect', async 
     const result=await client.callTool({name:'call_tool',arguments:{pageId:1,revision:'r1',name:'read',input:{q:'hello'}}});
     assert.deepEqual(JSON.parse(result.content[0].text).params.input,{q:'hello'});
     ws.close(); await once(ws,'close');
-    assert.equal((await client.callTool({name:'pages',arguments:{}})).isError,true);
+    const reconnecting=client.callTool({name:'call_tool',arguments:{pageId:1,revision:'r1',name:'write',input:{}}});
+    await new Promise(resolve=>setTimeout(resolve,100));
+    ws=new WebSocket(`ws://127.0.0.1:${port}/extension?token=${token}`, {origin:'chrome-extension://'+'a'.repeat(32)});
+    const message=once(ws,'message');
+    const [raw]=await message;
+    assert.equal(JSON.parse(raw).method,'call');
+    ws.close();await once(ws,'close');
+    const interrupted=await reconnecting;
+    assert.equal(interrupted.isError,true);
+    assert.match(interrupted.content[0].text,/outcome may be unknown/);
+    ws=new WebSocket(`ws://127.0.0.1:${port}/extension?token=${token}`, {origin:'chrome-extension://'+'a'.repeat(32)});
+    let replayed=0;ws.on('message',raw=>{if(JSON.parse(raw).id)replayed++;});
+    await once(ws,'open');await new Promise(resolve=>setTimeout(resolve,150));
+    assert.equal(replayed,0,'dispatched operation is not replayed');
   } finally {ws?.terminate(); await client.close();}
 });

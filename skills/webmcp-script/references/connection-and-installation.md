@@ -15,7 +15,9 @@
 
 ## 安装用户脚本
 
-WebMCP Script Chrome 扩展：管理面板 → 新建脚本 → 粘贴完整源码 → 保存 → 核对范围并确认保存。
+优先发现 `browser_script_get` / `browser_script_preview` / `browser_script_commit`：用 catalog 定位脚本，get 读取当前或上一版源码，preview 传 action（import / enable / disable / remove / restore；import 传 source，其余传 id），审阅前后范围、哈希和执行影响，再在用户已有授权内 commit 其五分钟一次性 token。无需用户手动粘贴，也不重复索取已给出的授权。get 分页时核对 sha256 一致。预览失效或提交结果未知时先回读，不重试旧 token；扩展重载后重新预览。保存后检查 pageErrors，并重新发现页面工具，普通脚本更新或重新启用后需刷新页面。卸载删除当前和上一版，需保留则先导出。
+
+旧扩展没有上述工具时，说明需要同时更新扩展和 MCP。兼容路径：WebMCP Script Chrome 扩展：管理面板 → 新建脚本 → 粘贴完整源码 → 保存 → 核对范围并确认保存。
 替换保留脚本 ID 与用户启用状态；更新后刷新目标网页，重新发现并做只读验收。
 其他管理器使用它自身支持的安装与 MAIN world 机制，不能假设 GM API 兼容。
 

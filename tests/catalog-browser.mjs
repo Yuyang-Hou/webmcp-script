@@ -34,10 +34,14 @@ try {
   await until(async()=>{try{return await call('browser_catalog');}catch(error){throw Error(error.message+' UI: '+await manager.locator('#connection-state').innerText()+' '+await manager.locator('#pair-error').innerText());}});
   await manager.locator('a[href="#settings"]').click();await manager.locator('#retry').click();
   const page=await browser.newPage();await page.goto(url);
-  await manager.locator('#new-script').click();
   const source=`// ==UserScript==\n// @id catalog-acceptance\n// @name Catalog acceptance\n// @description Read-only test\n// @version 1\n// @webmcp-entry ${JSON.stringify({id:'project',title:'Project read tools',url:url+'{project}',parameters:{project:{description:'Project identifier',example:'demo'}}})}\n// @match http://127.0.0.1/*\n// ==/UserScript==\ndocument.modelContext.registerTool({name:'catalog_read',description:'Read test',inputSchema:{type:'object',properties:{}},execute:()=> 'ok'});`;
-  await manager.locator('.cm-content').fill(source);
-  await manager.locator('#save').click();await manager.locator('#confirm-save').click();
+  const install=await call('browser_script_preview',{action:'import',source});
+  await assert.rejects(call('browser_script_preview',{action:'import',source:source+'\nconst = ;'}),/Unexpected token/);
+  assert.equal((await call('browser_catalog')).scripts.length,0);
+  await call('browser_script_commit',{token:install.token});
+  await assert.rejects(call('browser_script_commit',{token:install.token}),/已使用/);
+  assert.equal((await call('browser_script_get',{id:'catalog-acceptance'})).source,source);
+  await assert.rejects(call('browser_script_preview',{action:'enable',id:'catalog-acceptance'}),/无需修改/);
   await until(async()=>assert.equal((await call('browser_catalog')).scripts.length,1));
   const {pages}=await call('pages');const target=pages.find(p=>p.url===url);assert(target);
   await call('browser_entry',{action:'save',name:'Acceptance test',pageId:target.pageId||target.id,url,expectedUrl:null});
@@ -56,5 +60,28 @@ try {
   await assert.rejects(call('browser_entry',{action:'save',name:'Acceptance test',pageId:visited.pageId,url,expectedUrl:null}),/入口已变化/);
   await call('browser_entry',{action:'remove',name:'Acceptance test',expectedUrl:url});
   assert.equal((await call('browser_catalog')).entries.length,0);
-  console.log('PASS: real Chrome UI install -> MCP catalog with closed page -> resolve parameterized entry -> direct visit -> native describe/call -> stale-write rejection -> remove');
+  const change=async params=>call('browser_script_commit',{token:(await call('browser_script_preview',params)).token});
+  const changedSource=source.replace('@version 1','@version 2').replace("()=> 'ok'","()=> 'version-2'");
+  const updated=await change({action:'import',source:changedSource});
+  assert.equal(updated.script.version,'2');assert.equal(updated.script.canRestore,true);
+  const live=browser.pages().find(p=>p.url()===resolved.url);assert(live);
+  await live.reload();
+  const readNative=async()=>{
+    const snapshot=await until(async()=>{const s=await call('inspect_page',{pageId:visited.pageId});assert(s.tools.some(t=>t.name==='catalog_read'));return s;});
+    const args={pageId:visited.pageId,revision:snapshot.revision,name:'catalog_read'};
+    await call('describe_tool',args);return (await call('call_tool',{...args,input:{}})).result;
+  };
+  assert.equal(await readNative(),'version-2');
+  await change({action:'disable',id:'catalog-acceptance'});
+  assert(!(await call('inspect_page',{pageId:visited.pageId})).tools.some(t=>t.name==='catalog_read'));
+  const restored=await change({action:'restore',id:'catalog-acceptance'});
+  assert.equal(restored.script.version,'1');assert.equal(restored.script.enabled,false);
+  assert.equal((await call('browser_script_get',{id:'catalog-acceptance',version:'previous'})).source,changedSource);
+  await change({action:'enable',id:'catalog-acceptance'});await live.reload();
+  assert.equal(await readNative(),'ok');
+  assert.equal((await change({action:'remove',id:'catalog-acceptance'})).removed,true);
+  assert.equal((await call('browser_catalog')).scripts.length,0);
+  assert(!(await call('inspect_page',{pageId:visited.pageId})).tools.some(t=>t.name==='catalog_read'));
+  console.log('PASS: real Chromium extension, MCP-only install/get/update/disable/restore/enable/remove, one-shot preview, closed-page catalog/entry and native read invocation');
+
 } finally {await client.close();await browser?.close();server.close();await rm(profile,{recursive:true,force:true});}

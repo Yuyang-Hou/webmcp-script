@@ -5,6 +5,30 @@
 
 ## Requirements
 
+### Requirement: AI management of installed Chrome scripts
+The MCP SHALL expose browser_script_get, browser_script_preview and browser_script_commit for the connected Chrome extension, reusing browser_catalog for discovery and the manager's serialized save, apply and rollback path. These operations SHALL NOT silently target the CLI library.
+
+#### Scenario: Complete script lifecycle through MCP
+- **WHEN** an authorized AI previews import/update, enable, disable, remove or restore
+- **THEN** it receives before/after metadata, source hashes, site scope, execution effects and a five-minute single-use token without executing source
+- **AND** import syntax is checked by the MCP server without execution; reads paginate current or previous source without returning connection credentials
+- **WHEN** the token is committed
+- **THEN** the exact change is persisted in Chrome storage and applied using the same path as manager edits; updates and previous-version restores preserve enabled state
+- **AND** removal deletes both current and previous source as in the manager; source can be read/exported before removal
+
+#### Scenario: Concurrent UI and AI edits or failed writes
+- **WHEN** any stored script changes after preview, a token expires or a commit is repeated
+- **THEN** commit rejects instead of overwriting newer state or replaying operations
+- **AND** commits and UI edits are serialized, pending previews are bounded, and a failed commit consumes its token
+- **WHEN** saving fails after application
+- **THEN** the shared recovery path attempts to restore stored registrations and reports incomplete page recovery; started script effects cannot be undone
+
+#### Scenario: Honest installed-state verification
+- **WHEN** a commit succeeds
+- **THEN** the result reads back installed metadata and reports page errors separately from persistence
+- **AND** ordinary script updates and re-enables require page refresh and native discovery before claiming current code is active
+- **AND** acceptance uses a real isolated Chromium extension with MCP-only script operations, including read-only native invocation; it does not claim the user's existing installation was upgraded
+
 ### Requirement: Browser installation and entry discovery
 The MCP SHALL expose a searchable catalog sourced directly from the connected Chrome extension's installed scripts and persisted named entry URLs, without requiring open website pages or per-install memory edits. This catalog SHALL NOT replace native tool discovery or the separate CLI library.
 
@@ -158,6 +182,11 @@ Multiple MCP clients SHALL share one authenticated loopback relay while isolatin
 #### Scenario: Idle exit and restart
 - **WHEN** no MCP clients remain for the idle period
 - **THEN** the relay exits and a later client automatically starts it again
+- **AND** a request arriving before Chrome reconnects waits up to 30 seconds before dispatch; the normal 25-second execution timeout starts only after dispatch
+- **AND** if Chrome remains unavailable the error states that the request was not sent, without declaring pairing invalid; expired requests and requests from disconnected clients are never dispatched later
+- **AND** requests already dispatched are never replayed after disconnection
+- **AND** relay connection events and idle exits are logged with timestamps and without pairing secrets
+- **AND** transport tests with a simulated extension verify these boundaries; they do not establish installed Chrome acceptance
 
 ### Requirement: Focused script workspace
 The manager SHALL separate script management from connection settings, allow name, ID and scope search and enabled-state filtering, and confirm removal before deleting current and previous sources.
@@ -294,7 +323,7 @@ The manager SHALL accept userscripts without a proprietary @id by deriving a sta
 
 #### Scenario: Toolbar badge
 - **WHEN** the bridge is connected and the current HTTP(S) page's native discovery succeeds
-- **THEN** its tab-specific toolbar badge shows the native tool count, including zero, capped visually at 99+ with the full count in its tooltip
+- **THEN** its tab-specific toolbar badge shows a positive native tool count, capped visually at 99+ with the full count in its tooltip; zero tools leaves the badge empty
 - **WHEN** the bridge disconnects or pairing is missing
 - **THEN** an exclamation badge takes priority and the tooltip explains the connection state; reconnect restores page counts
 - **AND** loading and unsupported pages show no count, failed discovery shows a question mark and page tool errors show an exclamation mark
