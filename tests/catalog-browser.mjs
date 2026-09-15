@@ -98,6 +98,8 @@ try {
   await manager.locator('#update-check').click();
   await manager.locator('#update-review:not([disabled])').waitFor();
   const evidence=process.env.BROWSER_EVIDENCE_DIR||resolve(root,'../ui-acceptance');await mkdir(evidence,{recursive:true});
+  // Headful Chromium under Xvfb may not produce screenshot frames for a background tab.
+  await manager.bringToFront();
   await manager.screenshot({path:join(evidence,'脚本更新设置.png')});
   await manager.locator('#update-review').click();
   await manager.locator('#update-preview-dialog[open]').waitFor();
