@@ -365,3 +365,11 @@ Installed userscripts SHALL optionally declare validated single-line JSON webmcp
 - **WHEN** a script is created or updated
 - **THEN** the template, skill and format documentation explain entry declarations and installation preview shows their URLs and parameters
 - **AND** browser acceptance closes the website page before catalog lookup and parameter resolution, then directly opens the result and validates a read-only native tool without clicking site menus
+
+### Requirement: Honest reconnect guidance
+The extension SHALL preserve pairing on connection loss and distinguish unpaired, connecting, waiting for bridge and connected states without interpreting a WebSocket failure as invalid credentials.
+
+#### Scenario: Idle bridge restarts
+- **WHEN** the bridge becomes unavailable after pairing
+- **THEN** the UI explains automatic retry and asks AI to start the bridge and verify pages before requesting a new pairing code
+- **AND** retry retains the waiting state until connected and does not discard the saved token

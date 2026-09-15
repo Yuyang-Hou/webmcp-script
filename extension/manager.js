@@ -1,5 +1,5 @@
 import {prepareImport,createScriptTemplate} from './metadata.js';
-import {parsePairing,connectionInstructions,connectionChecks} from './connection.js';
+import {parsePairing,connectionInstructions,connectionChecks,connectionNext} from './connection.js';
 import {$,send,element,discovery,connection,matchesURL,toolSource} from './ui.js';
 let scripts=[], pages=[], draft, editor, pending, busy=false;
 let noticeTimer;
@@ -23,13 +23,13 @@ function editorState() {
 async function run(action) {message('error');try {await action();}catch(e){message('error',e.message);}}
 function updateStatus(state) {
   $('connection').dataset.connected=state.bridgeStatus==='已连接';
-  $('connection-label').textContent=state.bridgeStatus==='已连接'?'已连接':state.bridgeStatus==='连接中…'?'连接中…':'未连接';
+  $('connection-label').textContent=state.bridgeStatus==='已连接'?'已连接':state.bridgeStatus==='连接中…'?'连接中…':state.bridgeStatus==='未配对'?'未连接':'等待桥接';
   $('connection').title=`${connection(state)} · 点击打开连接设置`;
   $('connection').setAttribute('aria-label',`${connection(state)}，打开连接设置`);
   const connected=state.bridgeStatus==='已连接',waiting=state.bridgeStatus==='连接中…',unpaired=state.bridgeStatus==='未配对';
-  $('connection-state').textContent=connected?'浏览器已连接':waiting?'正在连接…':unpaired?'尚未连接':'连接未完成';
+  $('connection-state').textContent=connected?'浏览器已连接':waiting?'正在连接…':unpaired?'尚未连接':state.bridgeStatus;
   $('connection-state').dataset.connected=connected;
-  $('connection-next').textContent=connected?'回到 AI，说“查看当前浏览器有哪些网页工具”，完成连接验证。':waiting?'正在等待本机服务响应。':unpaired?'完成上一步后，在这里连接。':'请让 AI 重新准备连接，并把它返回的连接码粘贴到这里。';
+  $('connection-next').textContent=connectionNext(state.bridgeStatus);
   $('permission').textContent=state.userScriptsAvailable?'允许用户脚本 · 已就绪':'尚未允许用户脚本';
   if(state.lastError)message('error',state.lastError);
 }

@@ -210,12 +210,12 @@ async function connect() {
   const port=Number(storedPort);
   if(!Number.isInteger(port)||port<1||port>65535) {setBridgeStatus('本地端口无效，请重新配对');connecting=false;return;}
   if (!token) {setBridgeStatus('未配对');connecting=false;return;}
-  setBridgeStatus('连接中…');
+  if(bridgeStatus!=='等待本机桥接，自动重连中')setBridgeStatus('连接中…');
   const ws=new WebSocket(`ws://127.0.0.1:${port}/extension?token=${encodeURIComponent(token)}`);
   socket=ws;
   ws.onopen=()=>{if(socket!==ws)return;connecting=false;setBridgeStatus('已连接');ws.send(JSON.stringify({type:'hello',version:'0.4.0-beta.2'}));};
-  ws.onclose=()=>{if(socket!==ws)return;connecting=false;setBridgeStatus('连接断开，自动重连中');setTimeout(connect,3000);};
-  ws.onerror=()=>{if(socket===ws)setBridgeStatus('本地桥接连接失败');};
+  ws.onclose=()=>{if(socket!==ws)return;connecting=false;setBridgeStatus('等待本机桥接，自动重连中');setTimeout(connect,3000);};
+  ws.onerror=()=>{if(socket===ws)setBridgeStatus('等待本机桥接，自动重连中');};
   ws.onmessage=async event=> {
     let message;
     try { message=JSON.parse(event.data); if(message.type==='ping') {if(ws.readyState===1)ws.send(JSON.stringify({type:'pong'}));return;} if(!message.id || !message.method) return;

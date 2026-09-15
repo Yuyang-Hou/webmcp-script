@@ -32,6 +32,14 @@ assert.equal(sockets[1].sent[0].type,'hello');
 assert.equal(sockets[0].sent.length,1);
 sockets[0].onclose();
 assert.equal(vm.runInContext('bridgeStatus',context),'已连接');
+
+await vm.runInContext('socket.close()',context);
+assert.equal(vm.runInContext('bridgeStatus',context),'等待本机桥接，自动重连中');
+await vm.runInContext('connect()',context);
+assert.equal(vm.runInContext('bridgeStatus',context),'等待本机桥接，自动重连中');
+sockets.at(-1).open();
+assert.equal(vm.runInContext('bridgeStatus',context),'已连接');
+
 const response=await new Promise(resolve=>{assert.equal(onMessage({type:'status'},{url:'chrome-extension://test/manager.html',tab:{id:3}},resolve),true);});
 assert.ok(response.result);
 context.chrome.tabs.query=async()=>[{id:1,url:'http://localhost/'}];

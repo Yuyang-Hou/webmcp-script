@@ -7,7 +7,7 @@ async function render(){
   $('error').textContent='';$('error').hidden=true;
   const [state,tabs]=await Promise.all([send({type:'status'}),chrome.tabs.query({active:true,currentWindow:true})]);
   const connected=state.bridgeStatus==='已连接';
-  $('connection').textContent=connected?'已连接':state.bridgeStatus==='连接中…'?'正在连接…':'未连接';
+  $('connection').textContent=connected?'已连接':state.bridgeStatus==='连接中…'?'正在连接…':state.bridgeStatus==='未配对'?'未连接':'等待桥接';
   $('connection-mark').replaceChildren(icon(connected?'check':'link'));
   $('connect').dataset.connected=connected;
   $('connect').title=connected?'本机桥接已连接 · 点击打开连接设置':`${state.bridgeStatus} · 点击打开连接设置`;

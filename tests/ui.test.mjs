@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {discovery,matchesURL,toolSource} from '../extension/ui.js';
-import {parsePairing,connectionInstructions,connectionChecks} from '../extension/connection.js';
+import {parsePairing,connectionInstructions,connectionChecks,connectionNext} from '../extension/connection.js';
 const token='a'.repeat(64);
 assert.equal(toolSource({source:{kind:'script',id:'plain',name:'阅读助手'}}),'脚本 · 阅读助手');
 assert.equal(toolSource({source:{kind:'page'}}),'页面提供');
@@ -24,3 +24,6 @@ for(const [pattern,url,expected] of [
  ['http://localhost/*','http://localhost:17892/a',true],['https://example.com/a','https://example.com/a?b=1',false],
  ['https://example.com/*',undefined,false]
 ])assert.equal(matchesURL(pattern,url),expected,`${pattern} ${url}`);
+
+assert.match(connectionNext('等待本机桥接，自动重连中'),/暂不需要重新粘贴/);
+assert.match(connectionNext('本地端口无效，请重新配对'),/端口无效/);
