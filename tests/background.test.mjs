@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import * as updates from '../extension/updates.js';
 import {webcrypto} from 'node:crypto';
 import {prepareImport,parseScript} from '../extension/metadata.js';
 import {resolveEntry} from '../extension/entries.js';
@@ -12,10 +13,11 @@ class WebSocket {
   close(){this.readyState=3;this.onclose?.();}
   open(){this.readyState=1;this.onopen?.();}
 }
-let release, onMessage, onHistory, onUpdated, onActivated, onRemoved, storedScripts=[];
+let release, onMessage, onHistory, onUpdated, onActivated, onRemoved, onAlarm, storedScripts=[];
 const listener={addListener(){}};
 const badges=new Map(),titles=new Map();
-const context=vm.createContext({WebSocket,URL,setTimeout(){},fetch:async()=>({text:async()=>''}),chrome:{action:{setBadgeText:async({tabId,text})=>badges.set(tabId,text),setBadgeBackgroundColor:async()=>{},setBadgeTextColor:async()=>{},setTitle:async({tabId,title})=>titles.set(tabId,title)},storage:{local:{get:async()=>({scripts:storedScripts,token:'test-token'})}},runtime:{getURL:p=>'chrome-extension://test/'+p,onInstalled:listener,onMessage:{addListener(handler){onMessage=handler;}}},alarms:{create(){},onAlarm:listener},tabs:{query:async()=>[],onRemoved:{addListener(handler){onRemoved=handler;}},onUpdated:{addListener(handler){onUpdated=handler;}},onActivated:{addListener(handler){onActivated=handler;}},sendMessage:()=>new Promise(r=>release=r)},webNavigation:{onHistoryStateUpdated:{addListener(handler){onHistory=handler;}}}}});
+const context=vm.createContext({WebSocket,URL,setTimeout(){},fetch:async()=>({text:async()=>''}),chrome:{action:{setBadgeText:async({tabId,text})=>badges.set(tabId,text),setBadgeBackgroundColor:async()=>{},setBadgeTextColor:async()=>{},setTitle:async({tabId,title})=>titles.set(tabId,title)},storage:{local:{get:async()=>({scripts:storedScripts,token:'test-token'})}},runtime:{getURL:p=>'chrome-extension://test/'+p,onInstalled:listener,onMessage:{addListener(handler){onMessage=handler;}}},alarms:{get:async()=>undefined,create(){},onAlarm:{addListener(handler){onAlarm=handler;}}},tabs:{query:async()=>[],onRemoved:{addListener(handler){onRemoved=handler;}},onUpdated:{addListener(handler){onUpdated=handler;}},onActivated:{addListener(handler){onActivated=handler;}},sendMessage:()=>new Promise(r=>release=r)},webNavigation:{onHistoryStateUpdated:{addListener(handler){onHistory=handler;}}}}});
+Object.assign(context,updates);
 context.parsePairing=parsePairing;
 context.parseScript=parseScript;
 context.resolveEntry=resolveEntry;
@@ -244,4 +246,44 @@ await assert.rejects(preview({action:'import',source:'not a userscript'}),/元�
 assert.equal((await commit((await preview({action:'remove',id:'managed'})).token)).removed,true);
 assert.equal(storedScripts.length,0);
 console.log('browser scripts: import/read/update/restore/toggle/remove, preview isolation, UI races, one-shot expiry and storage rollback checked');
+}
+
+// Scheduled updates work without pages or an MCP connection and never inject into existing documents.
+{
+const manage=(method,args)=>vm.runInContext(`dispatch(${JSON.stringify(method)},${JSON.stringify(args)})`,context);
+const original=scriptSource('updater'),next=original.replace('@version 1','@version 2');
+storedScripts=[{...parseScript(original),enabled:false}];
+context.chrome.storage.local.get=async()=>({scripts:structuredClone(storedScripts)});
+context.chrome.storage.local.set=async value=>{storedScripts=structuredClone(value.scripts);};
+context.chrome.tabs.query=async()=>[];
+vm.runInContext('registerScripts=async scripts=>{registry=scripts};socket=undefined',context);
+const configure=async mode=>manage('update-settings',{id:'updater',expectedSha256:await updates.digest(storedScripts[0].source),expectedRevision:storedScripts[0].updates?.revision??null,mode,updateURL:'https://example.com/script',downloadURL:''});
+await configure('auto');
+await assert.rejects(manage('update-settings',{id:'updater',mode:'manual',expectedSha256:'stale'}),/已变化/);
+let fetched=0,downloaded=next;
+context.inspectUpdate=script=>updates.inspectUpdate(script,async()=>{fetched++;return new Response(downloaded);});
+assert.equal((await manage('update-check',{id:'updater'})).updates.status,'available');
+assert.equal(storedScripts[0].source,original); // Manual checking cannot install.
+storedScripts[0].updates.lastCheck=0;
+onAlarm({name:'script-updates'});await vm.runInContext('mutation',context);
+assert.equal(storedScripts[0].source,next);assert.equal(storedScripts[0].previousSource,original);assert.equal(storedScripts[0].enabled,false);
+assert.equal(storedScripts[0].updates.status,'updated');assert(storedScripts[0].activateAfter);
+const before=fetched;onAlarm({name:'script-updates'});await vm.runInContext('mutation',context);assert.equal(fetched,before);
+// A route event/retry in an older document must also keep the downloaded code dormant.
+const gated=await vm.runInContext(`sourceFor(${JSON.stringify({...storedScripts[0],source:'globalThis.executed=true;'})})`,context);
+const oldDocument=vm.createContext({performance:{timeOrigin:1}});vm.runInContext(gated,oldDocument);assert.equal(oldDocument.executed,undefined);
+storedScripts[0].source+='\n// local edit';storedScripts[0].updates.lastCheck=0;
+downloaded=next.replace('@version 2','@version 3');
+onAlarm({name:'script-updates'});await vm.runInContext('mutation',context);
+assert.equal(storedScripts[0].version,'2');assert.match(storedScripts[0].updates.reasons.join(),/本地源码/);
+const preview=await manage('script-preview',{action:'update',id:'updater'});
+assert.equal(preview.candidateSource,downloaded);assert.match(preview.reviewReasons.join(),/本地源码/);
+await manage('script-commit',{token:preview.token});assert.equal(storedScripts[0].version,'3');
+await configure('notify');downloaded=downloaded.replace('@version 3','@version 4');
+onAlarm({name:'script-updates'});await vm.runInContext('mutation',context);assert.equal(storedScripts[0].version,'3');assert.equal(storedScripts[0].updates.status,'available');
+await configure('auto');
+context.chrome.storage.local.set=async value=>{if(value.scripts[0].version==='4')throw Error('quota');storedScripts=structuredClone(value.scripts);};
+onAlarm({name:'script-updates'});await vm.runInContext('mutation',context);
+assert.equal(storedScripts[0].version,'3');assert.equal(context.registry[0].version,'3');assert.equal(storedScripts[0].updates.status,'error');
+console.log('scheduled updates: independent alarms, manual checks, notify/auto, stale policies, local conflicts, frozen preview, deferred route execution and quota rollback checked');
 }

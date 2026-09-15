@@ -38,5 +38,15 @@
 <section id="settings" class="settings" aria-label="设置" hidden><h2>用户脚本</h2><p id="permission">正在检查…</p><p class="muted">如未授权，请在 Chrome 的扩展详情中开启“允许用户脚本”。</p><button id="retry">重新加载脚本</button><hr><h2>关于</h2><p>WebMCP Script <span id="version"></span></p><p class="muted">脚本编辑器使用 CodeMirror 6（MIT）。仅安装可信来源的脚本。</p></section>
 </main>
 <dialog id="preview-dialog" aria-labelledby="preview-title"><h2 id="preview-title">确认保存</h2><dl><dt>名称</dt><dd id="preview-name"></dd><dt>版本</dt><dd id="preview-version"></dd><dt>网站范围</dt><dd id="preview-matches"></dd><dt>状态</dt><dd id="preview-state"></dd><dt>页面入口</dt><dd id="preview-entries"></dd></dl><p id="scope-change" class="muted"></p><p class="muted">脚本可读取和操作这些网站。确认后保存并尝试加载到匹配页面。</p><p id="preview-error" class="error" role="alert" hidden></p><div class="dialog-actions"><button id="cancel-save" autofocus>取消</button><button id="confirm-save">确认保存</button></div></dialog>
+<dialog id="update-dialog" aria-labelledby="update-title">
+<h2 id="update-title">脚本更新</h2><p id="update-summary" class="muted"></p>
+<label for="update-url">检查更新地址（HTTPS）</label><input id="update-url" type="url" placeholder="https://example.com/script.meta.js">
+<label for="download-url">源码下载地址（可与检查地址相同）</label><input id="download-url" type="url" placeholder="https://example.com/script.user.js">
+<label for="update-mode">更新方式</label><select id="update-mode"><option value="manual">手动检查</option><option value="notify">每天自动检查，由我确认更新</option><option value="auto">每天自动检查并更新</option></select>
+<p class="muted">自动更新表示信任此来源未来发布的代码。本地修改、网站范围或来源变化会暂停自动覆盖；新版在下次打开或刷新页面时生效。只支持无需登录 Cookie 的直接源码地址。</p>
+<p id="update-message" role="status"></p><p id="update-error" class="error" role="alert" hidden></p>
+<div class="dialog-actions"><button id="update-close">关闭</button><button id="update-configure">保存设置</button><button id="update-check">检查已保存来源</button><button id="update-review">预览新版</button></div>
+</dialog>
+<dialog id="update-preview-dialog" aria-labelledby="update-preview-title"><h2 id="update-preview-title">确认脚本更新</h2><pre id="update-diff"></pre><details><summary>查看当前源码</summary><textarea id="update-old-source" aria-label="当前源码" readonly rows="8"></textarea></details><details><summary>查看新版源码</summary><textarea id="update-new-source" aria-label="新版源码" readonly rows="8"></textarea></details><p class="muted">确认后替换源码并保留上一版，下次打开或刷新页面时生效。</p><p id="update-commit-error" class="error" role="alert" hidden></p><div class="dialog-actions"><button id="update-cancel">取消</button><button id="update-commit">确认更新</button></div></dialog>
 <script type="module" src="manager.js"></script>
 </body></html>

@@ -4,7 +4,7 @@ import {WebSocketServer,WebSocket} from 'ws';
 import {config,version} from './config.mjs';
 const {token,port,idleMs}=await config();
 const clients=new Set(),pending=new Map();
-const methods=new Set(['catalog','resolve-entry','entry','script-get','script-preview','script-commit','pages','inspect','describe','call','visit']);
+const methods=new Set(['catalog','resolve-entry','entry','script-get','script-preview','script-commit','update-settings','update-check','pages','inspect','describe','call','visit']);
 let peer,sequence=0,idle;
 const send=(ws,message)=>{if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify(message));};
 const changed=()=>{for(const client of clients)send(client,{type:'changed'});};

@@ -15,7 +15,7 @@ test('standard MCP discovery, authentication, invocation and disconnect', async 
   try {
     await client.connect(transport);
     const tools=(await client.listTools()).tools;
-    assert.deepEqual(tools.map(x=>x.name).sort(),['browser_catalog','browser_entry','browser_resolve_entry','browser_script_commit','browser_script_get','browser_script_preview','call_tool','connection_info','describe_tool','inspect_page','native_build','native_launch','native_select_build','pages','script_change','script_import','script_library_status','script_preview','visit_page']);
+    assert.deepEqual(tools.map(x=>x.name).sort(),['browser_catalog','browser_entry','browser_resolve_entry','browser_script_check_update','browser_script_commit','browser_script_get','browser_script_preview','browser_script_update_settings','call_tool','connection_info','describe_tool','inspect_page','native_build','native_launch','native_select_build','pages','script_change','script_import','script_library_status','script_preview','visit_page']);
     const setup=await client.callTool({name:'connection_info',arguments:{}});
     assert(!setup.isError);
     assert.deepEqual(JSON.parse(JSON.parse(setup.content[0].text).pairingCode),{version:1,token,port});
