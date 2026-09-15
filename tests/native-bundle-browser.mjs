@@ -10,7 +10,7 @@ try{await access(resolve(root,'../../work/browser-test/browsers'));process.env.P
 const {chromium}=await import('playwright');
 const work=await mkdtemp(join(tmpdir(),'webmcp-native-browser-')),extension=join(work,'extension');
 const plain=join(work,'native.user.js');
-const template=createScriptTemplate().replace('https://example.com/*','http://127.0.0.1/*');
+const template=createScriptTemplate().replaceAll('https://example.com/','http://127.0.0.1/');
 const templateTool=template.match(/name: '(read_title_[^']+)'/)[1];
 await writeFile(plain,template);
 await bundleNative([resolve(root,'examples/local-demo.user.js'),plain],extension);
