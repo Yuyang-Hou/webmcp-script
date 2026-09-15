@@ -198,33 +198,41 @@ setInterval(async()=>{try{const state=await send({type:'status'});updateStatus(s
 let updateScript,updatePreview,updateBusy=false;
 function updateButtons() {
   if(!updateScript)return;
-  const settings=updateSettings(updateScript),unsaved=$('update-url').value.trim()!==settings.updateURL||$('download-url').value.trim()!==settings.downloadURL||$('update-mode').value!==settings.mode;
-  $('update-check').disabled=updateBusy||unsaved;$('update-review').disabled=updateBusy||unsaved||settings.status!=='available';
+  const settings=updateSettings(updateScript),available=!!(settings.updateURL&&settings.downloadURL);
+  $('update-auto-check').disabled=updateBusy||!available;
+  $('update-auto-install').disabled=updateBusy||!available||!$('update-auto-check').checked;
+  $('update-check').disabled=updateBusy||!available;$('update-review').disabled=updateBusy||settings.status!=='available';
 }
-for(const id of ['update-url','download-url','update-mode'])$(id).addEventListener('input',updateButtons);
 $('update-dialog').addEventListener('cancel',event=>{if(updateBusy)event.preventDefault();});
 async function openUpdates(id) {
   const state=await send({type:'status'});updateScript=state.scripts.find(s=>s.id===id);
   if(!updateScript)throw Error('脚本已卸载');
   const settings=updateSettings(updateScript);
   $('update-title').textContent=`更新 · ${updateScript.name}`;
-  $('update-url').value=settings.updateURL;$('download-url').value=settings.downloadURL;$('update-mode').value=settings.mode;
+  $('update-auto-check').checked=settings.mode!=='manual';$('update-auto-install').checked=settings.mode==='auto';
+  $('update-source').textContent=settings.updateURL?`更新地址由脚本声明：${settings.updateURL}`:'脚本未声明更新地址，请作者补充 @updateURL / @downloadURL';
   $('update-summary').textContent=`当前 ${updateScript.version} · 最新 ${settings.latestVersion||'尚未检查'} · 上次检查 ${settings.lastCheck?new Date(settings.lastCheck).toLocaleString():'尚未检查'}`;
-  $('update-message').textContent=[settings.message||'保存更新来源后即可检查',...(settings.reasons||[])].join('；');
+  $('update-message').textContent=[settings.message||'勾选后自动保存；未勾选时仅手动检查',...(settings.reasons||[])].join('；');
   updateButtons();message('update-error');
   if(!$('update-dialog').open)$('update-dialog').showModal();
 }
 async function updateAction(action) {
   updateBusy=true;
-  const buttons=['update-configure','update-check','update-review','update-close','update-url','download-url','update-mode'];for(const id of buttons)$(id).disabled=true;
+  const buttons=['update-check','update-review','update-close','update-auto-check','update-auto-install'];for(const id of buttons)$(id).disabled=true;
   message('update-error');
   try {await action();}catch(error){message('update-error',error.message);}finally{updateBusy=false;for(const id of buttons)$(id).disabled=false;updateButtons();}
 }
 $('update-close').onclick=()=>$('update-dialog').close();
-$('update-configure').onclick=()=>updateAction(async()=>{
-  await send({type:'update-settings',id:updateScript.id,expectedSha256:await digest(updateScript.source),expectedRevision:updateSettings(updateScript).revision??null,mode:$('update-mode').value,updateURL:$('update-url').value.trim(),downloadURL:$('download-url').value.trim()});
-  await openUpdates(updateScript.id);await refresh();
-});
+async function saveUpdateMode() {
+  if(!$('update-auto-check').checked)$('update-auto-install').checked=false;
+  const mode=$('update-auto-install').checked?'auto':$('update-auto-check').checked?'notify':'manual';
+  await updateAction(async()=>{
+    try {await send({type:'update-settings',id:updateScript.id,expectedSha256:await digest(updateScript.source),expectedRevision:updateSettings(updateScript).revision??null,mode});}
+    finally {await openUpdates(updateScript.id);}
+    await refresh();
+  });
+}
+$('update-auto-check').onchange=saveUpdateMode;$('update-auto-install').onchange=saveUpdateMode;
 $('update-check').onclick=()=>updateAction(async()=>{await send({type:'update-check',id:updateScript.id});await openUpdates(updateScript.id);await refresh();});
 $('update-review').onclick=()=>updateAction(async()=>{
   await openUpdates(updateScript.id);

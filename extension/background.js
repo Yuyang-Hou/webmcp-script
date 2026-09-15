@@ -178,8 +178,8 @@ async function manageUpdate(method,params,automatic=false) {
   if(method==='update-settings') {
     if(!['manual','notify','auto'].includes(params.mode))throw Error('无效更新模式');
     if(params.expectedSha256!==await digest(script.source)||(params.expectedRevision??null)!==(current.revision??null))throw Error('脚本或更新设置已变化，请重新读取');
-    const check=params.updateURL?updateURL(params.updateURL):'',download=params.downloadURL?updateURL(params.downloadURL):check;
-    if(params.mode!=='manual'&&(!check||!download))throw Error('自动检查需要完整更新地址');
+    const check=current.updateURL?updateURL(current.updateURL):'',download=current.downloadURL?updateURL(current.downloadURL):'';
+    if(params.mode!=='manual'&&(!check||!download))throw Error('脚本未声明完整更新地址，请作者补充 @updateURL / @downloadURL');
     return persist({mode:params.mode,updateURL:check,downloadURL:download,baselineSha256:current.baselineSha256??await digest(script.source),revision:crypto.randomUUID(),status:check?'unchecked':'no-source',message:check?'等待检查更新':'尚未设置更新来源'});
   }
   const updates={...current,lastCheck:Date.now(),status:'checking',message:'',reasons:[],latestVersion:undefined};
@@ -345,7 +345,7 @@ chrome.alarms.onAlarm.addListener(alarm=>{
     mutation=mutation.catch(()=>{}).then(async()=>{
       const {scripts}=await settings();
       // ponytail: one due script per tick bounds work; batch only if large libraries need faster catch-up.
-      const due=scripts.find(s=>s.updates&&s.updates.mode!=='manual'&&Date.now()-(s.updates.lastCheck??0)>=86400000);
+      const due=scripts.find(s=>updateSettings(s).mode!=='manual'&&Date.now()-(updateSettings(s).lastCheck??0)>=86400000);
       if(due)await manageUpdate('update-check',{id:due.id},true);
     }).catch(error=>{lastError=error.message;});
   }

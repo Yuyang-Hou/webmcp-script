@@ -99,4 +99,4 @@ th:first-child,td:first-child{width:84px}
 
 .connection-setup #connection-checks{padding-left:20px;color:var(--text-secondary);font-size:12px}.connection-setup #connection-checks li{margin:8px 0}.connection-setup>details{margin-top:16px}.connection-setup>details>p{margin-top:12px}
 
-#update-dialog>input,#update-dialog>select{display:block;width:100%;margin:6px 0 14px}#update-preview-dialog textarea{width:100%;font-family:monospace}#update-diff{white-space:pre-wrap;overflow-wrap:anywhere}.dialog-actions{flex-wrap:wrap}
+.update-option{display:flex;align-items:center;gap:8px;margin:14px 0}#update-source{overflow-wrap:anywhere}#update-preview-dialog textarea{width:100%;font-family:monospace}#update-diff{white-space:pre-wrap;overflow-wrap:anywhere}.dialog-actions{flex-wrap:wrap}

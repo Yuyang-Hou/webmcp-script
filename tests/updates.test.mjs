@@ -10,8 +10,8 @@ for(const url of ['http://example.com/a','https://a:b@example.com/a','https://ex
 await assert.rejects(fetchScript('https://example.com/a',async()=>new Response('login',{headers:{'content-type':'text/html'}})),/登录页/);
 await assert.rejects(fetchScript('https://example.com/a',async()=>new Response('x'.repeat(1024*1024+1))),/1 MB/);
 await assert.rejects(fetchScript('https://example.com/a',async()=>new Response(null,{status:302,headers:{location:'https://other.example/a'}})),/跨站/);
-const original=parseScript(source()),remote=source('2');
-assert.equal((await inspectUpdate(original,()=>assert.fail('no URL'))).status,'no-source');
+const original=parseScript(source('1.0.0','// @updateURL https://example.com/a\n// @downloadURL https://example.com/a')),remote=source('2','// @updateURL https://example.com/a\n// @downloadURL https://example.com/a');
+assert.equal((await inspectUpdate(parseScript(source()),()=>assert.fail('no URL'))).status,'no-source');
 assert.equal(updateSettings(parseScript(source('1','// @updateURL none'))).downloadURL,'');
 original.updates={mode:'auto',updateURL:'https://example.com/a',downloadURL:'https://example.com/a',baselineSha256:await digest(original.source)};
 let downloaded=remote;
@@ -27,5 +27,10 @@ downloaded=original.source+'\n// changed';assert.equal((await inspectUpdate(orig
 downloaded=source('0.1');assert.equal((await inspectUpdate(original,fetcher)).status,'older');
 downloaded=remote.replace('@id updater','@id other');await assert.rejects(inspectUpdate(original,fetcher),/ID/);
 original.updates.downloadURL='https://example.com/download';
+original.source=original.source.replace('@downloadURL https://example.com/a','@downloadURL https://example.com/download');
 await assert.rejects(inspectUpdate(original,async url=>new Response(url.endsWith('download')?source('3'):source('2'))),/版本不一致/);
 console.log('updates: version ordering, no execution, transport limits, local edits, scope/source guards and metadata consistency checked');
+
+const migrated=updateSettings({...original,updates:{mode:'auto',updateURL:'https://old.example/a',downloadURL:'https://old.example/a',baselineSha256:'keep'}});
+assert.equal(migrated.mode,'manual');assert.equal(migrated.updateURL,'https://example.com/a');assert.equal(migrated.baselineSha256,'keep');
+assert.equal(updateSettings({...parseScript(source()),updates:{mode:'auto',updateURL:'https://old.example/a',downloadURL:'https://old.example/a'}}).mode,'manual');

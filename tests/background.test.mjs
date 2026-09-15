@@ -251,14 +251,15 @@ console.log('browser scripts: import/read/update/restore/toggle/remove, preview 
 // Scheduled updates work without pages or an MCP connection and never inject into existing documents.
 {
 const manage=(method,args)=>vm.runInContext(`dispatch(${JSON.stringify(method)},${JSON.stringify(args)})`,context);
-const original=scriptSource('updater'),next=original.replace('@version 1','@version 2');
+const original=scriptSource('updater').replace('// ==/UserScript==','// @updateURL https://example.com/script\n// @downloadURL https://example.com/script\n// ==/UserScript=='),next=original.replace('@version 1','@version 2');
 storedScripts=[{...parseScript(original),enabled:false}];
 context.chrome.storage.local.get=async()=>({scripts:structuredClone(storedScripts)});
 context.chrome.storage.local.set=async value=>{storedScripts=structuredClone(value.scripts);};
 context.chrome.tabs.query=async()=>[];
 vm.runInContext('registerScripts=async scripts=>{registry=scripts};socket=undefined',context);
-const configure=async mode=>manage('update-settings',{id:'updater',expectedSha256:await updates.digest(storedScripts[0].source),expectedRevision:storedScripts[0].updates?.revision??null,mode,updateURL:'https://example.com/script',downloadURL:''});
+const configure=async mode=>manage('update-settings',{id:'updater',expectedSha256:await updates.digest(storedScripts[0].source),expectedRevision:storedScripts[0].updates?.revision??null,mode,updateURL:'https://ignored.example/script',downloadURL:'https://ignored.example/script'});
 await configure('auto');
+assert.equal(storedScripts[0].updates.updateURL,'https://example.com/script');
 await assert.rejects(manage('update-settings',{id:'updater',mode:'manual',expectedSha256:'stale'}),/已变化/);
 let fetched=0,downloaded=next;
 context.inspectUpdate=script=>updates.inspectUpdate(script,async()=>{fetched++;return new Response(downloaded);});

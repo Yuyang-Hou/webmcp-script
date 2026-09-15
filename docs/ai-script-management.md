@@ -53,17 +53,14 @@ CLI/MCP 使用该库自己的 profile 目录。如果它已经在运行，返回
 
 ## 检查与自动更新
 
-不需要脚本站：任何可直接访问的 HTTPS `.user.js` 地址都可作更新源。支持 `@version`、`@updateURL`（可指向仅含完整元数据头的文件）、`@downloadURL`（完整源码）；只有一个地址时可复用同一份完整源码。缺少地址的本地/AI 脚本也能手动绑定来源；默认手动，元数据不会自行开启自动更新。
+更新地址由脚本作者在 UserScript 头部维护 `@updateURL` 和 `@downloadURL`。两个字段可指向同一份完整 HTTPS 源码；不提供用户地址输入框或 MCP 地址覆盖。没有声明地址时提示作者补充，自动模式不可选。
 
-管理面板 → 已安装脚本 → **更新**，设置来源和模式：手动、每天检查并提示、每天检查并自动更新。提示显示在脚本列表和更新弹窗，不发送系统通知。Chrome 运行时扩展每五分钟处理一个到期脚本，每个脚本间隔至少 24 小时；休眠时不检查，恢复后补查，不要求 AI 或 MCP 在线。
+管理面板 → 脚本 → 更新：勾选“自动检查更新（每天）”，再按需勾选“并自动安装更新”。勾选立即保存，取消检查会同时取消安装；不勾选为手动模式。声明 URL 本身不会开启自动模式。来源变化会暂停自动模式，需重新选择，不使用旧设置覆盖脚本头。
 
-AI 流程：
+AI 流程：先 `browser_script_get` 读取源码和更新设置，再用 `browser_script_update_settings` 传 id、expectedSha256、expectedRevision（首次 null）和 mode（manual/notify/auto）。不传 URL。自动安装需用户明确选择并信任未来代码；设置变化不会抹掉已有本地修改基线。
 
-1. `browser_script_get` 读取当前源码、`script.sha256` 和 `script.updates`。
-2. `browser_script_update_settings` 携带 `expectedSha256`、`expectedRevision`（首次为 null）、明确的 `mode: manual|notify|auto`、`updateURL` 和 `downloadURL`。自动安装意味着信任发布者未来代码，只在用户授权后启用。首次设置建立源码基线，后续保存设置不会抹掉本地修改冲突。
-3. `browser_script_check_update({id})` 检查并记录状态，始终不安装，即使模式为 auto。
-4. `browser_script_preview({action:"update",id})` 下载并冻结新版，返回 `candidateSource`、`reviewReasons`、before/after。审阅源码和运行网站范围，再以 `browser_script_commit({token})` 保存；过期或状态变化需重新预览，不能盲重试。
+`browser_script_check_update({id})` 始终只检查；`browser_script_preview({action:"update",id})` 返回冻结的 candidateSource 和 reviewReasons。审阅后用 `browser_script_commit({token})` 保存。版本增加、身份一致、来源和网站范围无变化且本机基线一致时才可自动安装。手动审阅允许来源变化，保存后暂停自动模式并从新版头部重新选择。
 
-更新保存后保留启停状态和上一版源码，在下次打开或刷新匹配页面时生效。当前页面及路由切换保留旧版，不自动刷新业务页。需重新发现并只读调用才可确认新版工具正常。
+Chrome 运行时每五分钟处理一个到期脚本，每个脚本间隔至少 24 小时；无 MCP 或业务页面时也能检查，休眠后补查。结果显示在列表和更新弹窗。更新保留启停状态和上一版源码，在下一次打开或完整刷新页面时执行；不自动刷新业务页面。保存不等于新版工具已可用。
 
-边界：仅 HTTPS、最大 1 MiB UTF-8、每次下载超时 8 秒；不携带 Cookie，也不支持登录跳转或跨站重定向，需配置最终源码地址。版本支持数字点分和 SemVer 预发布版本，尚不等同油猴全部版本排序规则。同版本源码不同、版本更低不覆盖；本地修改、网站范围变化、来源声明变化暂停自动安装。手动更新保留已绑定来源，不自动追随新版地址。回退会保留原有基线，因此不会悄悄再次自动升级。
+仅直接 HTTPS、最大 1 MiB UTF-8、每次下载 8 秒超时，不带 Cookie；拒绝登录 HTML、跨站跳转及元数据/下载内容不一致。数字点分和 SemVer 预发布版本可比较；同版本源码不同、版本回退不覆盖。语法检查不执行源码。

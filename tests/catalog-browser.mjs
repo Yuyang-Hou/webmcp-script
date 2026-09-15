@@ -42,7 +42,7 @@ try {
   await until(async()=>{try{return await call('browser_catalog');}catch(error){throw Error(error.message+' UI: '+await manager.locator('#connection-state').innerText()+' '+await manager.locator('#pair-error').innerText());}});
   await manager.locator('a[href="#settings"]').click();await manager.locator('#retry').click();
   const page=await browser.newPage();await page.goto(url);
-  const source=`// ==UserScript==\n// @id catalog-acceptance\n// @name Catalog acceptance\n// @description Read-only test\n// @version 1\n// @webmcp-entry ${JSON.stringify({id:'project',title:'Project read tools',url:url+'{project}',parameters:{project:{description:'Project identifier',example:'demo'}}})}\n// @match http://127.0.0.1/*\n// ==/UserScript==\ndocument.modelContext.registerTool({name:'catalog_read',description:'Read test',inputSchema:{type:'object',properties:{}},execute:()=> 'ok'});`;
+  const source=`// ==UserScript==\n// @id catalog-acceptance\n// @name Catalog acceptance\n// @description Read-only test\n// @version 1\n// @updateURL ${updateURL}\n// @downloadURL ${updateURL}\n// @webmcp-entry ${JSON.stringify({id:'project',title:'Project read tools',url:url+'{project}',parameters:{project:{description:'Project identifier',example:'demo'}}})}\n// @match http://127.0.0.1/*\n// ==/UserScript==\ndocument.modelContext.registerTool({name:'catalog_read',description:'Read test',inputSchema:{type:'object',properties:{}},execute:()=> 'ok'});`;
   const install=await call('browser_script_preview',{action:'import',source});
   await assert.rejects(call('browser_script_preview',{action:'import',source:source+'\nconst = ;'}),/Unexpected token/);
   assert.equal((await call('browser_catalog')).scripts.length,0);
@@ -91,10 +91,16 @@ try {
   published=source.replace('@version 1','@version 3').replace("()=> 'ok'","()=> 'version-3'")+"\nglobalThis.updateAcceptance = 3;";
   await manager.locator('a[href="#scripts"]').click();
   await manager.getByRole('button',{name:'更新',exact:true}).click();
-  await manager.locator('#update-url').fill(updateURL);
-  await manager.locator('#update-mode').selectOption('notify');
-  await manager.locator('#update-configure').click();
+  assert.equal(await manager.locator('#update-dialog input[type=url],#update-dialog select').count(),0);
+  await manager.locator('#update-auto-check').check();
   await until(async()=>assert.equal(await manager.locator('#update-message').innerText(),'等待检查更新'));
+  await manager.locator('#update-auto-install').check();
+  await until(async()=>assert.equal((await call('browser_script_get',{id:'catalog-acceptance'})).script.updates.mode,'auto'));
+  await manager.locator('#update-auto-check').uncheck();
+  await until(async()=>assert.equal((await call('browser_script_get',{id:'catalog-acceptance'})).script.updates.mode,'manual'));
+  assert(await manager.locator('#update-auto-install').isDisabled());assert(!await manager.locator('#update-auto-install').isChecked());
+  await manager.locator('#update-auto-check').check();
+  await until(async()=>assert.equal((await call('browser_script_get',{id:'catalog-acceptance'})).script.updates.mode,'notify'));
   await manager.locator('#update-check').click();
   await manager.locator('#update-review:not([disabled])').waitFor();
   const evidence=process.env.BROWSER_EVIDENCE_DIR||resolve(root,'../ui-acceptance');await mkdir(evidence,{recursive:true});
@@ -114,7 +120,7 @@ try {
   assert.equal(await live.evaluate(()=>globalThis.updateAcceptance),3);
   await manager.locator('#update-close').click();
   const current=(await call('browser_script_get',{id:'catalog-acceptance'})).script;
-  await call('browser_script_update_settings',{id:current.id,expectedSha256:current.sha256,expectedRevision:current.updates.revision,mode:'auto',updateURL,downloadURL:updateURL});
+  await call('browser_script_update_settings',{id:current.id,expectedSha256:current.sha256,expectedRevision:current.updates.revision,mode:'auto'});
   published=published.replace('@version 3','@version 4').replace('version-3','version-4').replace('Acceptance = 3','Acceptance = 4');
   await client.close(); // No MCP client is connected when the real alarm performs the update.
   await worker.evaluate(()=>chrome.alarms.create('script-updates',{when:Date.now()+100}));

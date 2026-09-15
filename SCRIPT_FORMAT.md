@@ -91,4 +91,4 @@ document.modelContext.registerTool({
 // @downloadURL https://scripts.example.com/read.user.js
 ```
 
-元数据文件需包含同一脚本的完整 UserScript 元数据头，下载文件为完整源码；两个字段也可指向同一 `.user.js`。地址必须可匿名直接获取，不能依赖站点登录 Cookie。未声明地址的本地脚本可在管理面板手动绑定来源。声明来源不自动启用更新；`@updateURL none` 禁用默认来源。版本支持数字点分及 SemVer 预发布格式，发布源码变化需递增版本。详见 [更新流程与保护](docs/ai-script-management.md#检查与自动更新)。
+元数据文件需包含同一脚本的完整 UserScript 元数据头，下载文件为完整源码；两个字段也可指向同一 `.user.js`。地址必须可匿名直接获取，不能依赖站点登录 Cookie。未声明地址的本地脚本需由作者补充头部后才能检查更新。用户仅勾选自动检查及自动安装，无需输入 URL。声明来源不自动启用更新；`@updateURL none` 禁用默认来源。版本支持数字点分及 SemVer 预发布格式，发布源码变化需递增版本。详见 [更新流程与保护](docs/ai-script-management.md#检查与自动更新)。

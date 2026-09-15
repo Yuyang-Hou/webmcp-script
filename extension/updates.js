@@ -54,7 +54,12 @@ export async function fetchScript(url,fetcher=fetch) {
 export function updateSettings(script) {
   const meta=parseScript(script.source);
   const check=meta.updateURL==='none'?'':meta.updateURL|| (meta.downloadURL==='none'?'':meta.downloadURL)||'';
-  return script.updates??{mode:'manual',updateURL:check,downloadURL:meta.downloadURL==='none'?'':meta.downloadURL||check};
+  const normalize=value=>{try{return value?updateURL(value):'';}catch{return value;}};
+  const source={updateURL:normalize(check),downloadURL:normalize(meta.downloadURL==='none'?'':meta.downloadURL||check)};
+  const saved=script.updates;
+  if(!saved)return {mode:'manual',...source};
+  if(saved.updateURL===source.updateURL&&saved.downloadURL===source.downloadURL)return {...saved,...source};
+  return {mode:'manual',...source,revision:saved.revision,baselineSha256:saved.baselineSha256,status:check?'unchecked':'no-source',message:check?'脚本更新来源已变化，请重新选择更新方式':'脚本未声明更新地址，请作者补充 @updateURL / @downloadURL'};
 }
 export async function inspectUpdate(script,fetcher=fetch) {
   const settings=updateSettings(script);
@@ -71,6 +76,7 @@ export async function inspectUpdate(script,fetcher=fetch) {
   const reasons=[];
   if(!settings.baselineSha256||settings.baselineSha256!==currentSha256)reasons.push('本地源码已修改或尚未建立更新基线');
   if(JSON.stringify([...next.matches].sort())!==JSON.stringify([...script.matches].sort()))reasons.push('脚本运行的网站范围变化');
-  if(next.updateURL&&next.updateURL!==settings.updateURL||next.downloadURL&&next.downloadURL!==settings.downloadURL)reasons.push('新版声明的更新来源变化；现有来源不会自动切换');
+  const declared=updateSettings(next);
+  if(declared.updateURL!==settings.updateURL||declared.downloadURL!==settings.downloadURL)reasons.push('新版声明的更新来源变化；需审阅后重新选择更新方式');
   return {status:'available',latestVersion:next.version,sha256,reasons,source:next.source,message:reasons.length?'有新版，需确认差异后更新':'有新版'};
 }

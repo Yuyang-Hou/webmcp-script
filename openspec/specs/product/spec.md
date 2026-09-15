@@ -404,7 +404,7 @@ The extension SHALL preserve pairing on connection loss and distinguish unpaired
 - **AND** retry retains the waiting state until connected and does not discard the saved token
 
 ### Requirement: User-controlled script update sources
-Installed scripts SHALL support optional HTTPS updateURL/downloadURL metadata and per-script manual, daily-check-only and daily-auto-install modes. No script marketplace or account service SHALL be required. Without explicit automatic opt-in, scripts SHALL remain manual. The manager and MCP SHALL expose current and latest versions, last check, source URLs, policy and actionable failure/conflict status.
+Installed scripts SHALL support author-maintained HTTPS updateURL/downloadURL metadata as the only source of URLs and per-script manual, daily-check-only and daily-auto-install modes. No script marketplace or account service SHALL be required. Without explicit automatic opt-in, scripts SHALL remain manual. The manager and MCP SHALL expose current and latest versions, last check, source URLs, policy and actionable failure/conflict status.
 
 #### Scenario: Check and review an update
 - **WHEN** the user or AI checks a configured source
@@ -426,3 +426,11 @@ Installed scripts SHALL support optional HTTPS updateURL/downloadURL metadata an
 - **THEN** it is registered for future documents without injecting or refreshing current pages
 - **AND** route maintenance, worker restarts and unrelated registry operations cannot execute that downloaded revision in a document created before the update
 - **AND** only a subsequent page open or full refresh can activate it; storage success is not evidence of page-tool acceptance
+
+
+#### Scenario: Checkbox-only update preferences
+- **WHEN** a user opens a script update dialog
+- **THEN** source URLs are read-only metadata and only automatic checking and dependent automatic installation checkboxes configure policy
+- **AND** checkbox changes save immediately, failed saves restore persisted values, and disabling checking also disables installation
+- **AND** missing metadata disables automatic preferences and directs the author to update the script header
+- **AND** MCP accepts policy only, legacy stored URL overrides do not override metadata, and source changes pause automatic mode while preserving local-edit protection
