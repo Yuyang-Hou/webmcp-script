@@ -65,8 +65,8 @@ try{
   assert.equal(await page.locator('#new-script').evaluate(el=>getComputedStyle(el,'::after').backgroundColor),'rgba(0, 0, 0, 0)');
   assert.equal(await page.locator('.tab-rail>a[aria-current=page]').evaluate(el=>getComputedStyle(el,'::after').backgroundColor),'rgb(78, 83, 91)');
   await page.evaluate(()=>fixture.bridgeStatus='等待本机桥接，自动重连中');
-  await page.locator('#connection-label').filter({hasText:'等待桥接'}).waitFor();
-  assert((await page.locator('#connection').getAttribute('title')).includes('等待本机桥接'));
+  await page.locator('#connection[data-idle=true]').waitFor();assert(await page.locator('#connection-label').isHidden());
+  assert((await page.locator('#connection').getAttribute('title')).includes('已就绪'));
   await page.locator('.app-header').screenshot({path:resolve(evidence,'单行顶栏-未连接.png')});
   await page.evaluate(()=>fixture.bridgeStatus='已连接');await page.locator('#connection-label').waitFor({state:'hidden'});
   await page.locator('.app-header').screenshot({path:resolve(evidence,'单行顶栏-已连接.png')});
@@ -166,13 +166,11 @@ try{
   assert.equal(await popup.locator('#connect').evaluate(el=>el.parentElement.id),'popup-footer');
   await popup.locator('#tools summary').click();assert(await popup.getByText('website_search',{exact:true}).isHidden());await popup.locator('#tools summary').click();
   await popup.evaluate(()=>fixture.bridgeStatus='等待本机桥接，自动重连中');await popup.getByRole('checkbox').uncheck();
-  assert.equal(await popup.locator('#connection').innerText(),'等待桥接');assert((await popup.locator('#connect').getAttribute('title')).includes('等待本机桥接'));
-  assert.equal(await popup.locator('#connect').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(233, 240, 250)');
-  assert(await popup.locator('#connect').evaluate(el=>el.getBoundingClientRect().top<document.querySelector('#tools').getBoundingClientRect().top));
+  assert(await popup.locator('#connection').isHidden());assert.equal(await popup.locator('#connect').evaluate(el=>el.parentElement.id),'popup-footer');
   await popup.locator('body').screenshot({path:resolve(evidence,'弹窗未连接.png')});
   await popup.evaluate(()=>{window.close=()=>{fixture.closed=true;};});await popup.locator('#connect').click();
   assert((await popup.evaluate(()=>fixture.opened)).endsWith('manager.html#connection-settings'));assert.equal(await popup.evaluate(()=>fixture.closed),true);
-  pass('tools come first and start expanded; connection sits in footer until disconnected; compact names and settings link work');
+  pass('tools come first and start expanded; connected and standby settings stay in footer without a standby warning');
   await popup.evaluate(()=>fixture.bridgeStatus='已连接');await popup.getByRole('checkbox').check();
   await popup.evaluate(()=>{fixture.savedTools=fixture.pages[0].tools;fixture.pages[0].tools=['read','prepare','execute'].map(s=>({name:'example_config_'+s}));});
   await popup.getByRole('checkbox').uncheck();

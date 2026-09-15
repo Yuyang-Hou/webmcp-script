@@ -67,11 +67,11 @@
 .popup #connect[data-connected=true] #connection-label,.popup #connect[data-connected=true]>.icon-chevron{display:none}
 .popup #connect[data-connected=true] .menu-icon{width:14px;height:14px;color:#77957e;margin-right:3px}
 .popup #connection-settings-label{margin-left:auto}
-.popup #connect[data-connected=false]{background:#e9f0fa;min-height:42px;border-radius:12px;margin-bottom:8px}
-.popup #connect[data-connected=false]:hover{background:#e2e9f2}
-.popup #connect[data-connected=false] #connection-settings-label{display:none}
-.popup #connect[data-connected=false] #connection{margin-left:auto;border-radius:14px;padding:3px 8px;background:#d5e3ff;font-size:12px}
-.popup #connect[data-connected=false]>.icon-chevron{margin-left:0}
+.popup #connect[data-connected=false]:not([data-idle=true]){background:#e9f0fa;min-height:42px;border-radius:12px;margin-bottom:8px}
+.popup #connect[data-connected=false]:not([data-idle=true]):hover{background:#e2e9f2}
+.popup #connect[data-connected=false]:not([data-idle=true]) #connection-settings-label{display:none}
+.popup #connect[data-connected=false]:not([data-idle=true]) #connection{margin-left:auto;border-radius:14px;padding:3px 8px;background:#d5e3ff;font-size:12px}
+.popup #connect[data-connected=false]:not([data-idle=true])>.icon-chevron{margin-left:0}
  [hidden]{display:none!important}@media(max-width:650px){.app-header{padding:0 10px;gap:6px}.tab-rail{gap:0}.tab-rail>a,.tab-rail .new-tab{padding:0 12px}.list-toolbar{padding:12px 16px;flex-wrap:wrap}.list-toolbar .row{width:100%}.list-toolbar input[type=search]{flex:1;min-width:0}.version-column,.site-column,.state-column,td.version-cell,td.site-cell,td.state-cell{display:none}th:first-child,td:first-child{padding-left:16px;width:56px}th:last-child,td:last-child{padding-right:16px;width:68px}.settings{padding:24px 16px}.page-item{padding:16px}.notice,.error{margin:10px 16px}.connection{max-width:50%;text-align:right}}
 
 body:not(.popup){height:100vh;display:flex;flex-direction:column}body:not(.popup)>.app-header,body:not(.popup)>.tab-rail{flex-shrink:0}main{display:flex;flex:1;flex-direction:column;min-height:0}main>section:not(.editor-panel){overflow:auto;flex:1}.editor-panel{height:auto;flex:1;min-height:250px}.notice,.error{flex-shrink:0}
@@ -100,3 +100,7 @@ th:first-child,td:first-child{width:84px}
 .connection-setup #connection-checks{padding-left:20px;color:var(--text-secondary);font-size:12px}.connection-setup #connection-checks li{margin:8px 0}.connection-setup>details{margin-top:16px}.connection-setup>details>p{margin-top:12px}
 
 .update-option{display:flex;align-items:center;gap:8px;margin:14px 0}#update-source{overflow-wrap:anywhere}#update-preview-dialog textarea{width:100%;font-family:monospace}#update-diff{white-space:pre-wrap;overflow-wrap:anywhere}.dialog-actions{flex-wrap:wrap}
+
+.app-header .connection[data-idle=true] #connection-label{display:none}
+.app-header .connection[data-idle=true]::before{background:#9b9b9b;border-radius:50%;transform:none}
+.popup #connect[data-idle=true] #connection-label,.popup #connect[data-idle=true] #connection-mark,.popup #connect[data-idle=true] #connection,.popup #connect[data-idle=true]>.icon-chevron{display:none}

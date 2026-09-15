@@ -1,3 +1,4 @@
+import {bridgeIdle} from './connection.js';
 import {digest,updateSettings} from './updates.js';
 import {prepareImport,createScriptTemplate} from './metadata.js';
 import {parsePairing,connectionInstructions,connectionChecks,connectionNext} from './connection.js';
@@ -23,12 +24,13 @@ function editorState() {
 }
 async function run(action) {message('error');try {await action();}catch(e){message('error',e.message);}}
 function updateStatus(state) {
+  $('connection').dataset.idle=bridgeIdle(state.bridgeStatus);
   $('connection').dataset.connected=state.bridgeStatus==='已连接';
   $('connection-label').textContent=state.bridgeStatus==='已连接'?'已连接':state.bridgeStatus==='连接中…'?'连接中…':state.bridgeStatus==='未配对'?'未连接':'等待桥接';
   $('connection').title=`${connection(state)} · 点击打开连接设置`;
   $('connection').setAttribute('aria-label',`${connection(state)}，打开连接设置`);
   const connected=state.bridgeStatus==='已连接',waiting=state.bridgeStatus==='连接中…',unpaired=state.bridgeStatus==='未配对';
-  $('connection-state').textContent=connected?'浏览器已连接':waiting?'正在连接…':unpaired?'尚未连接':state.bridgeStatus;
+  $('connection-state').textContent=connected?'浏览器已连接':waiting?'正在连接…':unpaired?'尚未连接':bridgeIdle(state.bridgeStatus)?'已就绪':state.bridgeStatus;
   $('connection-state').dataset.connected=connected;
   $('connection-next').textContent=connectionNext(state.bridgeStatus);
   $('permission').textContent=state.userScriptsAvailable?'允许用户脚本 · 已就绪':'尚未允许用户脚本';

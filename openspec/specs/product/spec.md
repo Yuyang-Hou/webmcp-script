@@ -434,3 +434,13 @@ Installed scripts SHALL support author-maintained HTTPS updateURL/downloadURL me
 - **AND** checkbox changes save immediately, failed saves restore persisted values, and disabling checking also disables installation
 - **AND** missing metadata disables automatic preferences and directs the author to update the script header
 - **AND** MCP accepts policy only, legacy stored URL overrides do not override metadata, and source changes pause automatic mode while preserving local-edit protection
+
+
+### Requirement: Quiet bridge standby
+Normal paired standby and reconnecting states SHALL NOT be presented as connection faults.
+
+#### Scenario: AI exits and starts again
+- **WHEN** the paired bridge exits while idle or waits for AI to reconnect
+- **THEN** the toolbar badge reflects actual page tools without a connection warning, the manager hides standby status text, and the popup keeps a quiet settings link in its footer
+- **AND** the connection details explain readiness without asking the user to reconnect
+- **AND** unpaired setup, invalid configuration and actual page errors remain actionable and visible

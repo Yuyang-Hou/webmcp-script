@@ -25,5 +25,5 @@ for(const [pattern,url,expected] of [
  ['https://example.com/*',undefined,false]
 ])assert.equal(matchesURL(pattern,url),expected,`${pattern} ${url}`);
 
-assert.match(connectionNext('等待本机桥接，自动重连中'),/暂不需要重新粘贴/);
+assert.match(connectionNext('等待本机桥接，自动重连中'),/无需操作或重新配对/);
 assert.match(connectionNext('本地端口无效，请重新配对'),/端口无效/);

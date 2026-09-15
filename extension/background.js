@@ -1,7 +1,7 @@
 import {digest,updateURL,updateSettings,inspectUpdate,validateSyntax} from './updates.js';
 import {resolveEntry} from './entries.js';
 import {prepareImport,parseScript} from './metadata.js';
-import {parsePairing} from './connection.js';
+import {parsePairing,bridgeIdle} from './connection.js';
 let socket, connecting = false, bridgeStatus = '未配对', lastError = '', mutation = Promise.resolve();
 const runtimeCode = fetch(chrome.runtime.getURL('runtime.js')).then(r => r.text());
 const settings = async () => ({scripts:[], token:'', port:17891, ...await chrome.storage.local.get(['scripts','token','port'])});
@@ -35,17 +35,17 @@ async function refreshBadge(tabId, loading=false) {
     ]);
   };
   try {
-    if(bridgeStatus!=='已连接')return await paint(bridgeStatus==='连接中…'?'':'!',bridgeStatus==='未配对'?'#986b24':'#b4483c',bridgeStatus);
+    if(bridgeStatus!=='已连接'&&!bridgeIdle(bridgeStatus))return await paint('!',bridgeStatus==='未配对'?'#986b24':'#b4483c',bridgeStatus);
     const tab=await chrome.tabs.get(tabId);
     if(!canScriptURL(tab.url))return await paint('','#737780','此页面不支持读取 WebMCP');
-    await paint('','#737780','本地桥接已连接 · 正在检测页面工具');
+    await paint('','#737780','正在检测页面工具');
     if(loading||tab.status==='loading')return;
     const snapshot=await page(tabId,'inspect');
     if(snapshot.native===false)return await paint('','#737780','浏览器未提供原生 WebMCP 接口');
     if(snapshot.errors?.length)return await paint('!','#b4483c','页面工具异常 · 打开插件查看详情');
     if(snapshot.native!==true||!Array.isArray(snapshot.tools))return await paint('?','#986b24','页面工具尚未就绪');
     const count=snapshot.tools.length;
-    await paint(count>99?'99+':count?String(count):'',count?'#28834d':'#737780',`本地桥接已连接 · 当前页 ${count} 个 WebMCP 工具`);
+    await paint(count>99?'99+':count?String(count):'',count?'#28834d':'#737780',`当前页 ${count} 个 WebMCP 工具`);
   } catch {
     await paint('?','#986b24','无法读取页面工具 · 打开插件查看详情').catch(()=>{});
   }

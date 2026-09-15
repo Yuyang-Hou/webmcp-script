@@ -1,3 +1,5 @@
+export const bridgeIdle=status=>['连接中…','等待本机桥接，自动重连中','连接断开，自动重连中'].includes(status);
+
 export function parsePairing(value, manualPort=17891) {
   const text=typeof value==='string'?value.trim():'';
   if(!text)throw Error('请先粘贴 AI 返回的连接码');
@@ -37,6 +39,7 @@ export function connectionChecks(state,pages) {
 
 export function connectionNext(status) {
   if(status==='已连接')return '回到 AI，说“查看当前浏览器有哪些网页工具”，完成连接验证。';
+  if(bridgeIdle(status))return '已就绪，AI 使用网页工具时自动连接，无需操作或重新配对。';
   if(status==='未配对')return '完成上一步后，在这里连接。';
   if(status.includes('端口无效'))return '保存的端口无效，请重新获取完整连接码。';
   return '配对信息已保存。请让 AI 调用 connection_info 启动本机桥接，再调用 pages 验证；扩展会自动重连，暂不需要重新粘贴连接码。桥接可能在 AI 空闲后退出；连接失败本身不能判定配对失效。若仍无法连接，再核对端口、连接码和其他浏览器占用。';
