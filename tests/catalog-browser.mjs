@@ -1,9 +1,11 @@
 // Real unpacked extension and stdio MCP acceptance in an isolated Chromium profile.
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {mkdtemp,rm,readFile,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {createServer} from 'node:http';
+import {createServer as createSecureServer} from 'node:https';
+import {execFileSync} from 'node:child_process';
 import {once} from 'node:events';
 import {chromium} from 'playwright';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
@@ -12,6 +14,12 @@ const root=resolve(import.meta.dirname,'..'),profile=await mkdtemp(join(tmpdir()
 const server=createServer((_req,res)=>res.end('<title>Catalog acceptance</title>'));
 server.listen(0,'127.0.0.1');await once(server,'listening');
 const url=`http://127.0.0.1:${server.address().port}/`;
+// A disposable local HTTPS publisher; certificate bypass is confined to this isolated test profile.
+execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(profile,'key.pem'),'-out',join(profile,'cert.pem'),'-days','1','-subj','/CN=localhost'],{stdio:'ignore'});
+let published='';
+const publisher=createSecureServer({key:await readFile(join(profile,'key.pem')),cert:await readFile(join(profile,'cert.pem'))},(_req,res)=>{res.setHeader('Content-Type','text/javascript');res.end(published);});
+publisher.listen(0,'127.0.0.1');await once(publisher,'listening');
+const updateURL=`https://127.0.0.1:${publisher.address().port}/script.user.js`;
 const client=new Client({name:'catalog-acceptance',version:'1'});
 const transport=new StdioClientTransport({command:process.execPath,args:[join(root,'bridge/server.mjs')],env:{...process.env,WEBMCP_PORT:process.env.TEST_PORT||'17961',WEBMCP_TOKEN:'isolated-catalog-acceptance-token',WEBMCP_IDLE_MS:'1000'},stderr:'pipe'});
 let browser;
@@ -20,7 +28,7 @@ async function until(fn){for(let i=0;i<60;i++){try{return await fn();}catch(erro
 try {
   await client.connect(transport);
   const {pairingCode}=await call('connection_info');
-  browser=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:false,args:['--enable-features=WebMCPTesting',`--disable-extensions-except=${join(root,'dist/extension')}`,`--load-extension=${join(root,'dist/extension')}`]});
+  browser=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:false,args:['--ignore-certificate-errors','--enable-features=WebMCPTesting',`--disable-extensions-except=${join(root,'dist/extension')}`,`--load-extension=${join(root,'dist/extension')}`]});
   const worker=browser.serviceWorkers()[0]||await browser.waitForEvent('serviceworker');
   worker.on('console',message=>{if(message.type()==='error')console.error('extension:',message.text());});
   const id=new URL(worker.url()).host;
@@ -34,7 +42,7 @@ try {
   await until(async()=>{try{return await call('browser_catalog');}catch(error){throw Error(error.message+' UI: '+await manager.locator('#connection-state').innerText()+' '+await manager.locator('#pair-error').innerText());}});
   await manager.locator('a[href="#settings"]').click();await manager.locator('#retry').click();
   const page=await browser.newPage();await page.goto(url);
-  const source=`// ==UserScript==\n// @id catalog-acceptance\n// @name Catalog acceptance\n// @description Read-only test\n// @version 1\n// @webmcp-entry ${JSON.stringify({id:'project',title:'Project read tools',url:url+'{project}',parameters:{project:{description:'Project identifier',example:'demo'}}})}\n// @match http://127.0.0.1/*\n// ==/UserScript==\ndocument.modelContext.registerTool({name:'catalog_read',description:'Read test',inputSchema:{type:'object',properties:{}},execute:()=> 'ok'});`;
+  const source=`// ==UserScript==\n// @id catalog-acceptance\n// @name Catalog acceptance\n// @description Read-only test\n// @version 1\n// @updateURL ${updateURL}\n// @downloadURL ${updateURL}\n// @webmcp-entry ${JSON.stringify({id:'project',title:'Project read tools',url:url+'{project}',parameters:{project:{description:'Project identifier',example:'demo'}}})}\n// @match http://127.0.0.1/*\n// ==/UserScript==\ndocument.modelContext.registerTool({name:'catalog_read',description:'Read test',inputSchema:{type:'object',properties:{}},execute:()=> 'ok'});`;
   const install=await call('browser_script_preview',{action:'import',source});
   await assert.rejects(call('browser_script_preview',{action:'import',source:source+'\nconst = ;'}),/Unexpected token/);
   assert.equal((await call('browser_catalog')).scripts.length,0);
@@ -79,9 +87,52 @@ try {
   assert.equal((await call('browser_script_get',{id:'catalog-acceptance',version:'previous'})).source,changedSource);
   await change({action:'enable',id:'catalog-acceptance'});await live.reload();
   assert.equal(await readNative(),'ok');
-  assert.equal((await change({action:'remove',id:'catalog-acceptance'})).removed,true);
-  assert.equal((await call('browser_catalog')).scripts.length,0);
-  assert(!(await call('inspect_page',{pageId:visited.pageId})).tools.some(t=>t.name==='catalog_read'));
-  console.log('PASS: real Chromium extension, MCP-only install/get/update/disable/restore/enable/remove, one-shot preview, closed-page catalog/entry and native read invocation');
+  // The real manager shares the MCP update/check/preview path.
+  published=source.replace('@version 1','@version 3').replace("()=> 'ok'","()=> 'version-3'")+"\nglobalThis.updateAcceptance = 3;";
+  await manager.locator('a[href="#scripts"]').click();
+  await manager.getByRole('button',{name:'更新',exact:true}).click();
+  assert.equal(await manager.locator('#update-dialog input[type=url],#update-dialog select').count(),0);
+  await manager.locator('#update-auto-check').check();
+  await until(async()=>assert.equal(await manager.locator('#update-message').innerText(),'等待检查更新'));
+  await manager.locator('#update-auto-install').check();
+  await until(async()=>assert.equal((await call('browser_script_get',{id:'catalog-acceptance'})).script.updates.mode,'auto'));
+  await manager.locator('#update-auto-check').uncheck();
+  await until(async()=>assert.equal((await call('browser_script_get',{id:'catalog-acceptance'})).script.updates.mode,'manual'));
+  assert(await manager.locator('#update-auto-install').isDisabled());assert(!await manager.locator('#update-auto-install').isChecked());
+  await manager.locator('#update-auto-check').check();
+  await until(async()=>assert.equal((await call('browser_script_get',{id:'catalog-acceptance'})).script.updates.mode,'notify'));
+  await manager.locator('#update-check').click();
+  await manager.locator('#update-review:not([disabled])').waitFor();
+  const evidence=process.env.BROWSER_EVIDENCE_DIR||resolve(root,'../ui-acceptance');await mkdir(evidence,{recursive:true});
+  // Headful Chromium under Xvfb may not produce screenshot frames for a background tab.
+  await manager.bringToFront();
+  await manager.screenshot({path:join(evidence,'脚本更新设置.png')});
+  await manager.locator('#update-review').click();
+  await manager.locator('#update-preview-dialog[open]').waitFor();
+  assert.equal(await manager.locator('#update-new-source').inputValue(),published);
+  await manager.screenshot({path:join(evidence,'脚本更新预览.png')});
+  await manager.locator('#update-commit').click();
+  await until(async()=>assert.equal((await call('browser_script_get',{id:'catalog-acceptance'})).script.version,'3'));
+  assert.equal(await readNative(),'ok');
+  await live.evaluate(()=>history.pushState({},'',location.pathname+'?route=changed'));
+  assert.equal(await readNative(),'ok'); // Route maintenance cannot activate a downloaded revision.
+  await live.reload();assert.equal(await readNative(),'version-3');
+  assert.equal(await live.evaluate(()=>globalThis.updateAcceptance),3);
+  await manager.locator('#update-close').click();
+  const current=(await call('browser_script_get',{id:'catalog-acceptance'})).script;
+  await call('browser_script_update_settings',{id:current.id,expectedSha256:current.sha256,expectedRevision:current.updates.revision,mode:'auto'});
+  published=published.replace('@version 3','@version 4').replace('version-3','version-4').replace('Acceptance = 3','Acceptance = 4');
+  await client.close(); // No MCP client is connected when the real alarm performs the update.
+  await worker.evaluate(()=>chrome.alarms.create('script-updates',{when:Date.now()+100}));
+  await until(async()=>assert.equal((await worker.evaluate(async()=>(await chrome.storage.local.get('scripts')).scripts[0])).version,'4'));
+  assert.equal(await live.evaluate(()=>globalThis.updateAcceptance),3);
+  await live.evaluate(()=>history.pushState({},'',location.pathname+'?route=again'));
+  assert.equal(await live.evaluate(()=>globalThis.updateAcceptance),3);
+  await live.reload();await until(async()=>assert.equal(await live.evaluate(()=>globalThis.updateAcceptance),4));
+  const stored=await worker.evaluate(async()=>(await chrome.storage.local.get('scripts')).scripts[0]);
+  assert.equal(stored.updates.status,'updated');assert(stored.previousSource.includes('@version 3'));
+  await manager.evaluate(()=>chrome.runtime.sendMessage({type:'remove',id:'catalog-acceptance'}));
+  assert.equal((await worker.evaluate(async()=>(await chrome.storage.local.get('scripts')).scripts)).length,0);
+  console.log('PASS: real Chromium extension + MCP lifecycle, HTTPS publisher, manager preview/install, native next-load behavior and automatic alarm update without MCP');
 
-} finally {await client.close();await browser?.close();server.close();await rm(profile,{recursive:true,force:true});}
+} finally {await client.close();await browser?.close();server.close();publisher.close();await rm(profile,{recursive:true,force:true});}

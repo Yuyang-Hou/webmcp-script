@@ -1,3 +1,4 @@
+import {bridgeIdle} from './connection.js';
 export const $ = id => document.getElementById(id);
 export async function send(message) {
   const reply = await chrome.runtime.sendMessage(message);
@@ -21,7 +22,7 @@ export function discovery(page) {
 export {matchesURL} from './entries.js';
 
 export function connection(state) {
-  return state.bridgeStatus === '已连接' ? '本地服务已连接' : state.bridgeStatus;
+  return state.bridgeStatus === '已连接' ? '本地服务已连接' : bridgeIdle(state.bridgeStatus)?'已就绪，按需自动连接':state.bridgeStatus;
 }
 export function toolSource(tool) {
   if(tool.source?.kind==='script')return `脚本 · ${tool.source.name||tool.source.id}`;
