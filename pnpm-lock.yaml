@@ -24,8 +24,8 @@ importers:
         specifier: ^1.27.1
         version: 1.30.0(zod@3.25.76)
       acorn:
-        specifier: 8.15.0
-        version: 8.15.0
+        specifier: 8.18.0
+        version: 8.18.0
       codemirror:
         specifier: ^6.0.2
         version: 6.0.2
@@ -260,8 +260,8 @@ packages:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
     engines: {node: '>= 0.6'}
 
-  acorn@8.15.0:
-    resolution: {integrity: sha512-NZyJarBfL7nWwIq+FDL6Zp/yHEhePMNnnJ0y3qfieCrmNvYct8uvtiV41UvlSe6apAfk0fY1FbWx+NwfmpvtTg==}
+  acorn@8.18.0:
+    resolution: {integrity: sha512-lGq+9yr1/GuAWaVYIHRjvvySG5/4VfKIvC8EWxStPdcDh/Ka7FG3twP6v4d5BkravUilhIAsG4Qj83t02LWUPQ==}
     engines: {node: '>=0.4.0'}
     hasBin: true
 
@@ -839,7 +839,7 @@ snapshots:
       mime-types: 3.0.2
       negotiator: 1.1.0
 
-  acorn@8.15.0: {}
+  acorn@8.18.0: {}
 
   ajv-formats@3.0.1(ajv@8.20.0):
     optionalDependencies:
