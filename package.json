@@ -28,7 +28,7 @@
     "acorn": "8.15.0",
     "codemirror": "^6.0.2",
     "ws": "^8.18.3",
-    "zod": "^3.25.76"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
