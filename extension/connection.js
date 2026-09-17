@@ -15,7 +15,7 @@ export function parsePairing(value, manualPort=17891) {
   return {token,port};
 }
 
-export function connectionInstructions(config,version='0.4.0-beta.2') {
+export function connectionInstructions(config,version='0.4.0-beta.3') {
   const install=config ? `请使用下面的本机 stdio 配置：\n${JSON.stringify(config,null,2)}` :
     `请检查本机 Node.js 是否为 22 或更新版本，并找到已解压的 WebMCP Script 安装目录。运行其中的 node setup.mjs，获取此电脑的 stdio 配置；它只输出配置，不修改客户端，也不启动服务。如果尚未下载，请从 https://github.com/Yuyang-Hou/webmcp-script/releases/tag/v${version} 获取 webmcp-script-${version}.zip 并按 SHA256SUMS.txt 校验，解压到固定目录。此包自带依赖，不要运行 pnpm install 或编译。不要猜测文件路径；不能访问本机文件时请说明需要用户提供什么。`;
   return `请帮我连接本机 Chrome 的 WebMCP Script 扩展。
