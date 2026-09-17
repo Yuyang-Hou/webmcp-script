@@ -328,7 +328,7 @@ async function connect() {
   if(bridgeStatus!=='等待本机桥接，自动重连中')setBridgeStatus('连接中…');
   const ws=new WebSocket(`ws://127.0.0.1:${port}/extension?token=${encodeURIComponent(token)}`);
   socket=ws;
-  ws.onopen=()=>{if(socket!==ws)return;connecting=false;setBridgeStatus('已连接');ws.send(JSON.stringify({type:'hello',version:'0.4.0-beta.2'}));};
+  ws.onopen=()=>{if(socket!==ws)return;connecting=false;setBridgeStatus('已连接');ws.send(JSON.stringify({type:'hello',version:'0.4.0-beta.3'}));};
   ws.onclose=()=>{if(socket!==ws)return;connecting=false;setBridgeStatus('等待本机桥接，自动重连中');setTimeout(connect,3000);};
   ws.onerror=()=>{if(socket===ws)setBridgeStatus('等待本机桥接，自动重连中');};
   ws.onmessage=async event=> {

@@ -1,6 +1,6 @@
 # 安装与首次使用
 
-0.4.0-beta.2 提供预构建 ZIP。加载扩展不需要终端；连接 AI 时需要本机 Node.js 22+。没有商店一键安装或自动更新。
+0.4.0-beta.3 提供预构建 ZIP。加载扩展不需要终端；连接 AI 时需要本机 Node.js 22+。扩展本体尚不支持商店一键安装或自动更新；已安装脚本可单独选择检查或自动更新。
 
 ## 1. 准备浏览器
 
@@ -10,7 +10,7 @@
 
 ## 2. 下载与加载
 
-从 [公测发布页](https://github.com/Yuyang-Hou/webmcp-script/releases/tag/v0.4.0-beta.2) 下载 **webmcp-script-0.4.0-beta.2.zip**，不是附带的 Source code 包。解压到固定目录，保留所有文件，无需 pnpm、npm install 或构建。
+从 [公测发布页](https://github.com/Yuyang-Hou/webmcp-script/releases/tag/v0.4.0-beta.3) 下载 **webmcp-script-0.4.0-beta.3.zip**，不是附带的 Source code 包。解压到固定目录，保留所有文件，无需 pnpm、npm install 或构建。
 
 打开 `chrome://extensions`，开启开发者模式 → 加载已解压的扩展程序 → 选择解压目录里的 **extension**。进入扩展详情，开启“允许用户脚本”。Chrome 138+ 使用每个扩展单独的开关，见 [官方说明](https://developer.chrome.com/docs/extensions/reference/api/userScripts)。
 

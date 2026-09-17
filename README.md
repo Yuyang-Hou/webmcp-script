@@ -1,9 +1,9 @@
 <p align="center"><img src="extension/icons/icon-128.png" width="88" height="88" alt="WebMCP Script 恐龙头标志"></p>
 <h1 align="center">WebMCP Script</h1>
 <p align="center">让 AI 使用网页工具，让网站脚本可以自由分享。</p>
-<p align="center"><a href="https://github.com/Yuyang-Hou/webmcp-script/releases/tag/v0.4.0-beta.2">下载公测版</a> · <a href="docs/getting-started.md">安装与首次使用</a> · <a href="https://github.com/Yuyang-Hou/webmcp-script/issues/new/choose">反馈问题</a></p>
+<p align="center"><a href="https://github.com/Yuyang-Hou/webmcp-script/releases/tag/v0.4.0-beta.3">下载公测版</a> · <a href="docs/getting-started.md">安装与首次使用</a> · <a href="https://github.com/Yuyang-Hou/webmcp-script/issues/new/choose">反馈问题</a></p>
 
-**0.4.0-beta.2 · 开发者公测**。Chrome 扩展负责管理独立 `.user.js` 脚本，本机 MCP 服务把网页原生 WebMCP 工具提供给 AI。网站已有工具和脚本补充的工具走同一条原生发现与调用链路。
+**0.4.0-beta.3 · 开发者公测**。Chrome 扩展负责管理独立 `.user.js` 脚本，本机 MCP 服务把网页原生 WebMCP 工具提供给 AI。网站已有工具和脚本补充的工具走同一条原生发现与调用链路。
 
 下载预构建 ZIP 即可加载扩展，连接 AI 需要 Node.js 22+，无需安装项目依赖或编译。尚未上架 Chrome Web Store；浏览器仍需提供实验性原生 WebMCP 接口。
 
@@ -23,7 +23,7 @@
 
 需要 **启用 WebMCP 的 Chromium**，连接 AI 另需 **Node.js 22+**。本项目实测 Chromium 153；安装扩展所需的 userScripts API 与原生 WebMCP 是两个不同条件。
 
-1. 下载公测页的 **webmcp-script-0.4.0-beta.2.zip**，解压到固定目录，保留包内所有文件。不要选 Source code。
+1. 下载公测页的 **webmcp-script-0.4.0-beta.3.zip**，解压到固定目录，保留包内所有文件。不要选 Source code。
 2. 在浏览器开启 WebMCP 测试功能，再加载解压目录中的 **extension** 并允许用户脚本。[逐步安装指南](docs/getting-started.md)包含具体入口和排错方法。
 3. 扩展 → 管理面板 → **连接** → 复制连接说明发给 AI，再粘贴 AI 返回的连接码。
 4. 请 AI 调用 `pages` 检查页面。首次验证可使用本地示例，避免用业务写操作试连通性。
@@ -45,7 +45,7 @@ AI 可运行包内 `node setup.mjs` 获取这台电脑的 MCP 配置。该命令
 
 ## 文档与维护
 
-### AI 自动发现（源码新增，旧版 ZIP 尚不包含）
+### AI 自动发现
 
 AI 可用 `browser_catalog` 搜索当前 Chrome 扩展已安装的脚本及保存的项目入口，无需先打开页面，也无需每次安装后修改记忆或项目提示文件。目录直接读取扩展存储，返回名称、说明、版本、范围、启停状态和脚本自带的参数化入口；它与 CLI 本地脚本库不同，也不代表页面原生工具已就绪。
 
@@ -65,7 +65,7 @@ AI 可用 `browser_catalog` 搜索当前 Chrome 扩展已安装的脚本及保�
 
 ### 配套 skill：WebMCP Script
 
-[WebMCP Script skill](skills/webmcp-script/SKILL.md)（原 web-code）随源码及后续预构建包维护，指导 AI 编写、验证、安装和修复网站用户脚本。调用名为 `$webmcp-script`；它不替代扩展或 MCP 服务，也不自动授权网站操作。已发布的旧版 ZIP 不包含此新增文件。
+[WebMCP Script skill](skills/webmcp-script/SKILL.md)（原 web-code）随源码及预构建包维护，指导 AI 编写、验证、安装和修复网站用户脚本。调用名为 `$webmcp-script`；它不替代扩展或 MCP 服务，也不自动授权网站操作。0.4.0-beta.3 预构建包已包含此 skill。
 
 安装到 Codex：将包内 `skills/webmcp-script` 整个目录复制到 `${CODEX_HOME:-$HOME/.codex}/skills/`，重新加载 skill 目录或新开任务。已有同名目录先核对，避免覆盖个人修改。从旧 `web-code` 迁移时，先将旧目录移到 skills 目录之外备份，再安装新名称，避免重复发现。其他客户端使用其支持的 skill 目录。
 
